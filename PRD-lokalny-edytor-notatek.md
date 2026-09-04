@@ -225,7 +225,169 @@ Vite musi otrzymywać konfigurowalny `base`, aby aplikacja działała zarówno p
 
 ## 11. Proponowany interfejs
 
-### Widok listy
+### 11.1. Kierunek wizualny
+
+Interfejs ma przypominać skupiony na tekście, minimalistyczny edytor w stylu iA Writer. Treść jest głównym elementem ekranu, a elementy sterujące pozostają dyskretne i nie konkurują z tekstem.
+
+Wymagany wzorzec wizualny:
+
+- białe tło i niemal czarny tekst w jasnym motywie;
+- automatyczny ciemny motyw zgodny z `prefers-color-scheme`;
+- podstawowa czcionka `IBM Plex Mono`, dostarczana lokalnie z aplikacją, z bezpiecznymi fontami systemowymi jako fallback;
+- rozmiar tekstu edytora `18px`, interlinia `1.6` i delikatnie zmniejszony odstęp między literami `-0.01em`;
+- kolumna tekstu o maksymalnej szerokości `68ch`, wyśrodkowana, z dużą ilością pustej przestrzeni;
+- brak obramowania, tła i domyślnego uchwytu zmiany rozmiaru pola edycji;
+- dyskretne kolory informacji drugorzędnych, placeholderów, obramowań i statusu zapisu;
+- zaznaczenie tekstu w subtelnym jasnoniebieskim kolorze;
+- brak dekoracyjnych animacji i efektów wymagających najechania kursorem.
+
+Poniższy CSS jest wzorcem referencyjnym dla wyglądu MVP. Dopuszczalne są techniczne uzupełnienia potrzebne dla dostępności, pozostałych widoków oraz lokalnego osadzenia fontu, ale nie powinny zmieniać opisanej typografii, szerokości kolumny ani palety bez aktualizacji PRD.
+
+```css
+:root {
+  --bg: #ffffff;
+  --text: #1a1a1a;
+  --text-secondary: #8f8f8f;
+  --text-muted: #b5b5b5;
+  --border: #e8e8e8;
+  --selection: #d9ecff;
+
+  --editor-width: 68ch;
+  --editor-font-size: 18px;
+  --editor-line-height: 1.6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+
+  background: var(--bg);
+  color: var(--text);
+
+  font-family:
+    "IBM Plex Mono",
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: var(--editor-font-size);
+  font-weight: 400;
+  line-height: var(--editor-line-height);
+  letter-spacing: -0.01em;
+
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.editor {
+  width: min(var(--editor-width), calc(100vw - 96px));
+  margin: 0 auto;
+  padding: 80px 0 160px;
+}
+
+textarea,
+[contenteditable="true"] {
+  display: block;
+  width: 100%;
+  min-height: calc(100vh - 160px);
+
+  margin: 0;
+  padding: 0;
+
+  border: 0;
+  outline: 0;
+  resize: none;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+
+  caret-color: var(--text);
+}
+
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+::selection {
+  background: var(--selection);
+}
+
+h1,
+h2,
+h3 {
+  margin: 1.8em 0 0.7em;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+h1 {
+  font-size: 1.35em;
+}
+
+h2 {
+  font-size: 1.15em;
+}
+
+h3 {
+  font-size: 1em;
+}
+
+p {
+  margin: 0 0 1.2em;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--text-secondary);
+  text-underline-offset: 0.15em;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2em 0;
+}
+
+/* Opcjonalny Focus Mode */
+
+.focus-muted {
+  color: var(--text-muted);
+}
+
+.focus-active {
+  color: var(--text);
+}
+
+/* Dark mode */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --text: #f2f2f2;
+    --text-secondary: #9a9a9a;
+    --text-muted: #666666;
+    --border: #343434;
+    --selection: #31445c;
+  }
+}
+```
+
+Klasy `.focus-muted` i `.focus-active` definiują jedynie możliwy kierunek stylistyczny. Sam Focus Mode nie należy do zakresu MVP.
+
+### 11.2. Widok listy
 
 - nagłówek z nazwą aplikacji;
 - pole „Nazwa nowej notatki”;
@@ -233,7 +395,7 @@ Vite musi otrzymywać konfigurowalny `base`, aby aplikacja działała zarówno p
 - wyszukiwarka;
 - menu kopii zapasowej i ustawień.
 
-### Widok edytora
+### 11.3. Widok edytora
 
 - edytowalny tytuł;
 - dyskretny adres/slug;
@@ -257,4 +419,7 @@ Interfejs powinien unikać animacji dekoracyjnych oraz zbędnych efektów po naj
 10. Eksport JSON i ponowny import odtwarzają wszystkie notatki wraz z tytułami, slugami i datami.
 11. Po wyczyszczeniu danych strony aplikacja nie udaje, że może odzyskać utracone notatki.
 12. Build produkcyjny może zostać opublikowany jako statyczny katalog na GitHub Pages.
+13. Edytor używa lokalnie dostarczanej czcionki IBM Plex Mono z opisanymi fallbackami, rozmiarem 18 px, interlinią 1.6 i maksymalną szerokością kolumny 68ch.
+14. Jasny i automatyczny ciemny motyw używają kolorów z referencyjnych zmiennych CSS i reagują na `prefers-color-scheme`.
+15. Główne pole edycji pozostaje wizualnie pozbawione obramowania i tła, a wymagany widoczny fokus klawiaturowy jest zapewniony bez zmiany minimalistycznego charakteru interfejsu.
 
