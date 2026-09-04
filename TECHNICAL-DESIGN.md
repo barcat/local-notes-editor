@@ -33,6 +33,8 @@ Aplikacja musi:
 - Import nie usuwa lokalnych notatek nieobecnych w kopii zapasowej.
 - Potwierdzenie usunięcia zawiera nazwę notatki, ale nie wymaga jej ręcznego przepisywania.
 - Opcjonalny licznik słów nie należy do MVP i nie jest częścią tego projektu.
+- CSS z sekcji 11.1 PRD jest normatywną bazą wizualną MVP. Techniczne uzupełnienia są dozwolone tylko dla dostępności, pozostałych widoków i lokalnego osadzenia fontu.
+- Klasy `.focus-muted` i `.focus-active` nie oznaczają implementacji Focus Mode; ta funkcja pozostaje poza MVP.
 - Ustawienia interfejsu obejmują na tym etapie wyłącznie zaakceptowanie komunikatu o lokalnym charakterze danych; stan ten może być zapisany w `localStorage`.
 - Nie jest wymagane odzyskiwanie notatek po wyczyszczeniu danych strony ani po odrzuceniu przez przeglądarkę operacji zapisu.
 
@@ -45,7 +47,7 @@ Aplikacja musi:
 | Dostęp do danych | Biblioteka `idb` nad natywnym IndexedDB | Zachowuje model i transakcje IndexedDB, ograniczając ilość technicznego kodu opartego na zdarzeniach. Nie wprowadza warstwy ORM. |
 | Routing | Własny mały moduł nad History API | MVP ma tylko trzy wzorce tras. Osobna biblioteka routingu nie daje istotnej korzyści, a moduł może jawnie obsłużyć `base` GitHub Pages. |
 | Offline cache | Service worker generowany podczas builda przez `vite-plugin-pwa`/Workbox w trybie precache | Gwarantuje ponowne uruchomienie aplikacji bez sieci po wcześniejszym załadowaniu zasobów. Cache obejmuje wyłącznie pliki aplikacji. |
-| UI | Semantyczny HTML i lokalny CSS; systemowy stos czcionek | Brak potrzeby frameworka UI, zewnętrznych fontów i ikon. Ułatwia mały bundle, dostępność oraz restrykcyjny CSP. |
+| UI | Semantyczny HTML, lokalny CSS i lokalnie dostarczany IBM Plex Mono z fallbackami systemowymi | Zachowuje minimalistyczny, skupiony na tekście styl z PRD bez frameworka UI ani zależności od zewnętrznego CDN. |
 | Testy | Vitest, Testing Library dla Preact, `fake-indexeddb` | Narzędzia współpracują z Vite i pozwalają testować komponenty oraz kontrakt magazynu bez prawdziwej przeglądarki. |
 | Hosting | GitHub Pages | Spełnia wymaganie statycznego hostingu; wynik nie wymaga funkcji serwerowych. |
 | Storage | IndexedDB dla notatek; `localStorage` wyłącznie dla niewrażliwego potwierdzenia komunikatu | Rozdzielenie jest zgodne z PRD i nie umieszcza treści notatek w synchronicznym magazynie ustawień. |
@@ -53,6 +55,23 @@ Aplikacja musi:
 Build produkcyjny tworzy katalog `dist/` zawierający `index.html`, zasoby z fingerprintami, service worker i `404.html`. Wartość `base` jest parametrem konfiguracji, dzięki czemu ten sam kod może być zbudowany dla domeny głównej albo ścieżki repozytorium.
 
 Wszystkie biblioteki są dołączane do lokalnego bundla. Aplikacja nie korzysta w czasie działania z CDN ani innych zewnętrznych skryptów.
+
+### Visual design and typography
+
+Plik `src/styles.css` implementuje referencyjny CSS z sekcji 11.1 PRD. Główne tokeny pozostają zdefiniowane jako custom properties:
+
+- kolory jasnego motywu: `#ffffff`, `#1a1a1a`, `#8f8f8f`, `#b5b5b5`, `#e8e8e8`, `#d9ecff`;
+- kolory ciemnego motywu: `#1c1c1e`, `#f2f2f2`, `#9a9a9a`, `#666666`, `#343434`, `#31445c`;
+- szerokość edytora: `68ch`;
+- bazowy rozmiar pisma: `18px`;
+- interlinia: `1.6`;
+- odstęp między literami: `-0.01em`.
+
+IBM Plex Mono jest przechowywany jako lokalny plik WOFF2 i deklarowany przez `@font-face`; aplikacja nie pobiera fontu z Google Fonts ani innego CDN. Stos awaryjny to `"SFMono-Regular", Consolas, "Liberation Mono", monospace`.
+
+Widok edytora używa wyśrodkowanej kolumny `min(68ch, calc(100vw - 96px))`, pionowych odstępów `80px 0 160px` oraz pola edycji bez obramowania, tła i możliwości zmiany rozmiaru. Pozostałe widoki używają tej samej palety i typografii, ale mogą stosować węższe, semantyczne kontrolki formularzy.
+
+Ciemny motyw jest wybierany automatycznie przez `prefers-color-scheme: dark`; MVP nie wymaga ręcznego przełącznika. Reguła `outline: 0` dla pola tekstowego nie może usuwać informacji o fokusie dla użytkownika klawiatury: fokus musi być widoczny przez kursor tekstowy lub dyskretny styl kontenera spełniający WCAG 2.1 AA. Przy `prefers-reduced-motion` aplikacja nie dodaje ruchu; dekoracyjne animacje pozostają zabronione.
 
 ## 4. Architecture
 
@@ -90,6 +109,8 @@ Nie jest potrzebny globalny framework zarządzania stanem. Stan listy i edytora 
 ```text
 /
 ├── public/
+│   ├── fonts/
+│   │   └── ibm-plex-mono-regular.woff2
 │   └── 404.html
 ├── src/
 │   ├── components/
@@ -380,6 +401,8 @@ Manualnej weryfikacji w produkcyjnym buildzie wymagają zachowania zależne od p
 - bezpośrednie wejście oraz odświeżenie każdej trasy na GitHub Pages dla domeny głównej i ścieżki repozytorium;
 - ponowne uruchomienie wcześniej załadowanej aplikacji w trybie offline;
 - brak żądań zawierających treść, tytuł, slug lub pełny URL notatki;
+- lokalne załadowanie IBM Plex Mono bez żądania do zewnętrznego CDN;
+- zgodność typografii, szerokości kolumny, odstępów, kolorów zaznaczenia oraz jasnego i ciemnego motywu z sekcją 11.1 PRD;
 - natywne cofanie/ponawianie w polu edycji oraz ostrzeżenie przy niezapisanych zmianach;
 - pobieranie plików JSON i `.txt` oraz wybór pliku importu;
 - nawigację samą klawiaturą, widoczny fokus, etykiety i kontrast głównych przepływów;
@@ -406,7 +429,7 @@ Manualnej weryfikacji w produkcyjnym buildzie wymagają zachowania zależne od p
 
 - Dane notatek pozostają w origin-specific IndexedDB przeglądarki i opuszczają je tylko w wyniku jawnego eksportu użytkownika.
 - Treść jest przypisywana do wartości pola tekstowego lub renderowana jako węzeł tekstowy; nie trafia do API interpretującego HTML.
-- Brak analityki, zewnętrznych skryptów, fontów, ikon i wywołań API wymaganych do działania.
+- Brak analityki, zewnętrznych skryptów, zdalnie pobieranych fontów, ikon i wywołań API wymaganych do działania. IBM Plex Mono jest częścią statycznego artefaktu aplikacji.
 - Tytuł i treść nie są umieszczane w tytule dokumentu, URL, logach ani cache service workera. Slug występuje wyłącznie w ścieżce zgodnie z PRD.
 - Produkcyjny build nie wymaga kodu inline, dzięki czemu hosting może zastosować CSP bez `unsafe-inline` dla skryptów.
 - Pliki importu są traktowane jako niezaufane dane i podlegają pełnej walidacji przed zapisem.
@@ -440,6 +463,7 @@ Manualnej weryfikacji w produkcyjnym buildzie wymagają zachowania zależne od p
 | Atomowość importu | Jedna transakcja IndexedDB po zatwierdzeniu konfliktów | Zapobiega częściowemu importowi. |
 | Interpretacja treści | Wyłącznie wartość pola tekstowego / węzeł tekstowy | Zachowuje format zwykłego tekstu oraz eliminuje wykonywanie Markdown i HTML. |
 | Biblioteki UI i stanu | Brak | Zakres nie uzasadnia dodatkowych abstrakcji ani zależności. |
+| Kierunek wizualny | Referencyjny CSS z PRD, lokalny IBM Plex Mono, automatyczny jasny/ciemny motyw | Zapewnia spójny, minimalistyczny interfejs skupiony na tekście bez zewnętrznych zależności runtime. |
 
 ## 14. Open Questions
 
@@ -451,3 +475,4 @@ None.
 - Projekt nie obejmuje kont, backendu, synchronizacji, udostępniania, współdzielenia, historii wersji, załączników, Markdown, szyfrowania, aplikacji natywnej ani interfejsu mobilnego.
 - Opcjonalny licznik słów został jawnie pozostawiony poza MVP.
 - Dokument określa granice modułów, kontrakty danych, zachowanie magazynu, routing i decyzje architektoniczne, ale nie zawiera kolejności implementacji, listy tasków ani kodu aplikacji.
+- Kierunek wizualny z PRD ma odpowiadające decyzje dotyczące lokalnego fontu, tokenów CSS, geometrii edytora, jasnego i ciemnego motywu oraz dostępnego fokusu.
