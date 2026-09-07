@@ -1,9 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./app";
+import { createNote, saveNote } from "./noteOperations";
 import { createNoteRepository } from "./noteRepository";
 
 describe("App shell", () => {
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
   it("opens the drawer, moves focus inside and closes it with Escape", async () => {
     render(<App />);
 
@@ -21,7 +26,7 @@ describe("App shell", () => {
     expect(drawer).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("clears the current draft when a new note is selected", () => {
+  it("clears the current draft when a new note is selected", async () => {
     render(<App />);
     const title = screen.getByPlaceholderText("Bez tytułu");
     const content = screen.getByPlaceholderText("Zacznij pisać…");
@@ -31,7 +36,7 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
     fireEvent.click(screen.getByRole("button", { name: "+ Nowa notatka" }));
 
-    expect(title).toHaveValue("");
+    await waitFor(() => expect(title).toHaveValue(""));
     expect(content).toHaveValue("");
   });
 
@@ -50,5 +55,25 @@ describe("App shell", () => {
     render(<App repository={repository} />);
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Trwała notatka"));
     expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue("HTML <b>i Markdown **bez interpretacji**");
+  });
+
+  it("lists, searches and switches between notes", async () => {
+    const repository = createNoteRepository(`app-switching-test-${crypto.randomUUID()}`);
+    await saveNote(createNote("Starsza notatka", "starsza", 10), repository, 10);
+    await saveNote(createNote("Nowsza notatka", "nowsza", 20), repository, 20);
+    render(<App repository={repository} />);
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Nowsza notatka"));
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Starsza notatka" })).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Nowsza notatka" })).toBeInTheDocument();
+
+    fireEvent.input(screen.getByPlaceholderText("Szukaj po tytule"), { target: { value: "starsza" } });
+    expect(screen.getByRole("button", { name: "Starsza notatka" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nowsza notatka" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Starsza notatka" }));
+
+    await waitFor(() => expect(window.location.pathname).toBe("/notatki/starsza-notatka"));
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Starsza notatka"));
   });
 });

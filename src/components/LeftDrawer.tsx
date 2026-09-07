@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { NotesList } from "./NotesList";
+import type { Note } from "../types";
 
 interface LeftDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onNewNote: () => void;
+  notes: Note[];
+  activeSlug?: string;
+  search: string;
+  onSearchChange: (value: string) => void;
+  onSelectNote: (slug: string) => void;
 }
 
 const focusableSelector = [
@@ -41,7 +48,7 @@ function ColorControl({ label, property, initialValue }: ColorControlProps) {
   );
 }
 
-export function LeftDrawer({ isOpen, onClose, onNewNote }: LeftDrawerProps) {
+export function LeftDrawer({ isOpen, onClose, onNewNote, notes, activeSlug, search, onSearchChange, onSelectNote }: LeftDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -110,13 +117,13 @@ export function LeftDrawer({ isOpen, onClose, onNewNote }: LeftDrawerProps) {
 
           <button class="primary-action" type="button" onClick={onNewNote}>+ Nowa notatka</button>
 
-          <label>
-            <span class="visually-hidden">Szukaj notatek</span>
-            <input class="search" type="search" placeholder="Szukaj po tytule" disabled />
-          </label>
-
-          <p class="section-label">Ostatnio edytowane</p>
-          <p class="empty-list">Nie masz jeszcze żadnych notatek.</p>
+          <NotesList
+            notes={notes}
+            activeSlug={activeSlug}
+            search={search}
+            onSearchChange={onSearchChange}
+            onSelect={onSelectNote}
+          />
 
           <section class="settings-card" aria-labelledby="appearance-title">
             <h2 class="card-title" id="appearance-title">Appearance</h2>
