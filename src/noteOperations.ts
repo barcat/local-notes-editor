@@ -3,6 +3,7 @@ import type { Note, NoteRepository } from "./types";
 
 export const DEFAULT_NOTE_TITLE = "Bez tytułu";
 export const MAX_SLUG_ATTEMPTS = 100;
+export const AUTO_SAVE_DELAY = 400;
 
 function isConstraintError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "ConstraintError";
@@ -66,6 +67,124 @@ export async function saveNote(
   }
 
   throw new Error("Nie udało się zapisać notatki z unikalnym slugiem.");
+}
+
+export interface SaveCoordinatorOptions {
+  repository: NoteRepository;
+  delay?: number;
+  now?: () => number;
+  onSaved?: (note: Note, isLatest: boolean) => void;
+  onError?: (error: unknown, note: Note, isLatest: boolean) => void;
+}
+
+export interface SaveCoordinator {
+  schedule(note: Note): number;
+  flush(): Promise<Note | undefined>;
+  cancel(): void;
+  dispose(): void;
+}
+
+interface PendingSave {
+  note: Note;
+  version: number;
+}
+
+/** Serializes debounced writes so a slow older transaction cannot overwrite a newer draft. */
+export function createSaveCoordinator({
+  repository,
+  delay = AUTO_SAVE_DELAY,
+  now = Date.now,
+  onSaved,
+  onError,
+}: SaveCoordinatorOptions): SaveCoordinator {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: PendingSave | undefined;
+  let active: Promise<Note | undefined> | undefined;
+  let version = 0;
+  let pendingIsReady = false;
+  let disposed = false;
+
+  const start = (): Promise<Note | undefined> => {
+    if (active) return active;
+    if (!pending || disposed) return Promise.resolve(undefined);
+
+    const current = pending;
+    pending = undefined;
+    const operation = (async () => {
+      try {
+        const saved = await saveNote(current.note, repository, now());
+        onSaved?.(saved, current.version === version);
+        return saved;
+      } catch (error) {
+        onError?.(error, current.note, current.version === version);
+        throw error;
+      }
+    })();
+
+    active = operation;
+    void operation.then(
+      () => {
+        active = undefined;
+        if (pending && pendingIsReady) void start().catch(() => undefined);
+      },
+      () => {
+        active = undefined;
+        if (pending && pendingIsReady) void start().catch(() => undefined);
+      },
+    );
+    return operation;
+  };
+
+  const schedule = (note: Note): number => {
+    if (disposed) return version;
+    version += 1;
+    pending = { note, version };
+    pendingIsReady = false;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      pendingIsReady = true;
+      void start().catch(() => undefined);
+    }, delay);
+    return version;
+  };
+
+  const flush = async (): Promise<Note | undefined> => {
+    if (disposed) return undefined;
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    pendingIsReady = true;
+
+    let activeError: unknown;
+    if (active) {
+      try {
+        await active;
+      } catch (error) {
+        activeError = error;
+      }
+    }
+
+    if (pending) return start();
+    if (activeError) throw activeError;
+    return undefined;
+  };
+
+  const cancel = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+    pending = undefined;
+    pendingIsReady = false;
+    version += 1;
+  };
+
+  const dispose = () => {
+    cancel();
+    disposed = true;
+  };
+
+  return { schedule, flush, cancel, dispose };
 }
 
 export function chooseAvailableSlug(baseSlug: string, occupiedSlugs: Iterable<string>): string {

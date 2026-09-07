@@ -83,6 +83,24 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
 .editor-title { margin-bottom: 30px; font-size: 1.25em; font-weight: 700; line-height: 1.45; }
 .editor-content { min-height: calc(100vh - 230px); resize: none; overflow: hidden; line-height: inherit; }
 .editor-title::placeholder, .editor-content::placeholder { color: var(--editor-text-soft); opacity: 1; }
+.error-toast {
+  position: fixed;
+  z-index: 50;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  max-width: min(440px, calc(100vw - 48px));
+  gap: 16px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #d9aaa4;
+  border-radius: 10px;
+  background: #fff5f3;
+  color: #64231f;
+  font: 14px/1.4 Arial, sans-serif;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 18%);
+}
+.error-toast button { padding: 0 4px; border: 0; background: transparent; color: inherit; font-size: 20px; line-height: 1; }
 .backdrop {
   position: fixed;
   z-index: 30;

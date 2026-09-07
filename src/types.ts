@@ -6,6 +6,15 @@ export interface Note {
   updatedAt: number;
 }
 
+export interface NoteDraft {
+  id?: string;
+  title: string;
+  content: string;
+  slug?: string;
+}
+
+export type SaveState = "unchanged" | "dirty" | "saving" | "saved" | "error";
+
 export interface NoteRepository {
   getBySlug(slug: string): Promise<Note | undefined>;
   getMostRecent(): Promise<Note | undefined>;
