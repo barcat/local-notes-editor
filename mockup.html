@@ -3,595 +3,436 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <meta name="color-scheme" content="light">
   <title>Lokalne notatki — makieta</title>
   <style>
     :root {
-      --bg: #ffffff;
-      --surface: #fafafa;
-      --text: #1a1a1a;
-      --text-secondary: #8f8f8f;
-      --text-muted: #b5b5b5;
-      --border: #e8e8e8;
-      --selection: #d9ecff;
-      --danger: #a2352a;
-      --danger-soft: #fff4f2;
-      --editor-width: 68ch;
-      --editor-font-size: 18px;
-      --editor-line-height: 1.6;
-      --focus: #245f9e;
+      --editor-bg: #233d4d;
+      --editor-text: #fe7f2d;
+      --editor-text-soft: color-mix(in srgb, var(--editor-text) 58%, var(--editor-bg));
+      --editor-selection: color-mix(in srgb, var(--editor-text) 28%, transparent);
+      --editor-font-family: "Courier New", monospace;
+      --editor-font-size: 13pt;
+      --editor-line-height: 1.8;
+      --editor-width: 920px;
+
+      --panel-bg: #ffffff;
+      --panel-surface: #fafafa;
+      --panel-text: #30364e;
+      --panel-muted: #979db2;
+      --panel-border: #e5e5e8;
+      --panel-hover: #f4f4f6;
+      --danger: #a23c35;
+      --focus: #315f93;
     }
 
     * { box-sizing: border-box; }
 
-    html { background: var(--bg); }
+    html,
+    body { min-height: 100%; }
 
     body {
       margin: 0;
       min-width: 1024px;
-      min-height: 100vh;
-      background: var(--bg);
-      color: var(--text);
-      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      background: var(--editor-bg);
+      color: var(--editor-text);
+      font-family: var(--editor-font-family);
       font-size: var(--editor-font-size);
-      font-weight: 400;
       line-height: var(--editor-line-height);
-      letter-spacing: -0.01em;
-    }
-
-    ::selection { background: var(--selection); }
-
-    button,
-    input,
-    textarea {
-      color: inherit;
-      font: inherit;
-      letter-spacing: inherit;
+      transition: background-color 120ms ease, color 120ms ease;
     }
 
     button,
-    a,
     input,
-    textarea { -webkit-tap-highlight-color: transparent; }
+    select,
+    textarea { font: inherit; }
 
     button { cursor: pointer; }
-
-    a { color: inherit; }
 
     :focus-visible {
       outline: 2px solid var(--focus);
       outline-offset: 3px;
     }
 
-    .skip-link {
-      position: fixed;
-      z-index: 100;
-      top: 12px;
-      left: 12px;
-      padding: 8px 12px;
-      transform: translateY(-160%);
-      border: 1px solid var(--border);
-      background: var(--bg);
+    ::selection { background: var(--editor-selection); }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
     }
 
-    .skip-link:focus { transform: translateY(0); }
-
-    .mockup-label {
+    .menu-button {
       position: fixed;
       z-index: 20;
-      right: 24px;
-      bottom: 20px;
-      padding: 6px 10px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--bg) 90%, transparent);
-      color: var(--text-secondary);
-      font-size: 11px;
-      letter-spacing: .04em;
-      pointer-events: none;
-    }
-
-    .app-header {
-      position: sticky;
-      z-index: 10;
-      top: 0;
+      top: 22px;
+      left: 24px;
       display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      min-height: 64px;
-      padding: 0 32px;
-      border-bottom: 1px solid var(--border);
-      background: color-mix(in srgb, var(--bg) 94%, transparent);
-      backdrop-filter: blur(8px);
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      padding: 0;
+      border: 1px solid color-mix(in srgb, var(--editor-text) 34%, transparent);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--editor-bg) 88%, transparent);
+      color: var(--editor-text);
     }
 
-    .brand,
-    .route-label,
-    .header-actions { font-size: 13px; }
+    .menu-button svg { width: 20px; height: 20px; }
 
-    .brand {
-      justify-self: start;
-      border: 0;
-      background: transparent;
-      font-weight: 600;
+    .editor-shell {
+      min-height: 100vh;
+      padding: 74px 48px 120px;
+      background: var(--editor-bg);
+      color: var(--editor-text);
     }
 
-    .route-label {
-      color: var(--text-muted);
-      user-select: none;
-    }
-
-    .header-actions {
-      display: flex;
-      justify-self: end;
-      align-items: center;
-      gap: 24px;
-    }
-
-    .text-button {
-      padding: 4px 0;
-      border: 0;
-      border-bottom: 1px solid transparent;
-      background: transparent;
-      color: var(--text-secondary);
-      text-decoration: none;
-    }
-
-    .text-button:hover,
-    .text-button[aria-current="page"] {
-      border-color: currentColor;
-      color: var(--text);
-    }
-
-    .text-button.danger:hover { color: var(--danger); }
-
-    .view[hidden] { display: none; }
-
-    .page {
-      width: min(var(--editor-width), calc(100vw - 96px));
+    .editor {
+      width: min(var(--editor-width), calc(100vw - 128px));
       margin: 0 auto;
-      padding: 80px 0 160px;
     }
 
-    .page-heading {
-      margin: 0 0 8px;
-      font-size: 28px;
-      font-weight: 500;
-      line-height: 1.3;
-      letter-spacing: -0.035em;
-    }
-
-    .page-lead {
-      max-width: 58ch;
+    .editor-title,
+    .editor-content {
+      display: block;
+      width: 100%;
       margin: 0;
-      color: var(--text-secondary);
-      font-size: 14px;
-    }
-
-    .local-notice {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 14px;
-      align-items: start;
-      margin: 40px 0 48px;
-      padding: 16px 18px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text-secondary);
-      font-size: 13px;
-      line-height: 1.55;
-    }
-
-    .notice-mark {
-      width: 8px;
-      height: 8px;
-      margin-top: 6px;
-      border-radius: 50%;
-      background: #4f8b66;
-      box-shadow: 0 0 0 4px color-mix(in srgb, #4f8b66 15%, transparent);
-    }
-
-    .notice-close {
       padding: 0;
       border: 0;
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 18px;
-      line-height: 1;
-    }
-
-    .notice-close:hover { color: var(--text); }
-
-    .create-form {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-      margin-bottom: 56px;
-    }
-
-    .field {
-      width: 100%;
-      padding: 12px 0;
-      border: 0;
-      border-bottom: 1px solid var(--border);
-      border-radius: 0;
-      background: transparent;
-    }
-
-    .field::placeholder { color: var(--text-muted); }
-
-    .field:focus {
-      border-color: var(--text-secondary);
       outline: 0;
-    }
-
-    .primary-button,
-    .secondary-button,
-    .danger-button {
-      min-height: 44px;
-      padding: 9px 16px;
-      border: 1px solid var(--text);
-      border-radius: 2px;
-      background: var(--text);
-      color: var(--bg);
-      font-size: 13px;
-    }
-
-    .secondary-button {
-      border-color: var(--border);
       background: transparent;
-      color: var(--text);
+      color: inherit;
+      font-family: inherit;
     }
 
-    .danger-button {
-      border-color: var(--danger);
-      background: var(--danger);
-      color: #fff;
+    .editor-title {
+      margin-bottom: 30px;
+      font-size: 1.25em;
+      font-weight: 700;
+      line-height: 1.45;
     }
 
-    .primary-button:hover { opacity: .82; }
-
-    .secondary-button:hover { border-color: var(--text-secondary); }
-
-    .list-heading {
-      display: flex;
-      gap: 28px;
-      align-items: end;
-      justify-content: space-between;
-      margin-bottom: 18px;
+    .editor-content {
+      min-height: calc(100vh - 230px);
+      resize: none;
+      overflow: hidden;
+      line-height: inherit;
     }
 
-    .section-title {
-      margin: 0;
+    .editor-title::placeholder,
+    .editor-content::placeholder { color: var(--editor-text-soft); }
+
+    .backdrop {
+      position: fixed;
+      z-index: 30;
+      inset: 0;
+      border: 0;
+      background: rgba(14, 22, 28, .42);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    .backdrop.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .drawer {
+      position: fixed;
+      z-index: 40;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 400px;
+      overflow-y: auto;
+      transform: translateX(-100%);
+      border-right: 1px solid var(--panel-border);
+      background: var(--panel-bg);
+      color: var(--panel-text);
+      font-family: Arial, sans-serif;
       font-size: 14px;
+      line-height: 1.45;
+      transition: transform 180ms ease;
+    }
+
+    .drawer.is-open { transform: translateX(0); }
+
+    .drawer-inner { padding: 22px 14px 30px; }
+
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 4px 22px;
+    }
+
+    .drawer-title {
+      margin: 0;
+      font-size: 15px;
       font-weight: 600;
     }
 
-    .search-label {
-      width: 230px;
-      font-size: 13px;
+    .icon-button {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      padding: 0;
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      background: var(--panel-bg);
+      color: var(--panel-text);
+    }
+
+    .primary-action {
+      width: 100%;
+      min-height: 42px;
+      margin-bottom: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--panel-text);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .search {
+      width: 100%;
+      height: 40px;
+      margin-bottom: 10px;
+      padding: 0 12px;
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      background: var(--panel-bg);
+      color: var(--panel-text);
+    }
+
+    .search::placeholder { color: var(--panel-muted); }
+
+    .section-label {
+      margin: 20px 16px 8px;
+      color: var(--panel-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
     }
 
     .notes-list {
       margin: 0;
       padding: 0;
-      border-top: 1px solid var(--border);
       list-style: none;
     }
 
-    .note-link {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 24px;
-      align-items: baseline;
+    .note-button {
       width: 100%;
-      padding: 20px 2px;
-      border: 0;
-      border-bottom: 1px solid var(--border);
-      background: transparent;
-      text-align: left;
-    }
-
-    .note-link:hover .note-title { text-decoration: underline; text-underline-offset: 4px; }
-
-    .note-title {
+      padding: 11px 12px;
       overflow: hidden;
-      font-size: 16px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--panel-text);
+      text-align: left;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .note-date {
-      color: var(--text-muted);
-      font-size: 12px;
-      white-space: nowrap;
-    }
+    .note-button:hover,
+    .note-button[aria-current="page"] { background: var(--panel-hover); }
 
-    .empty-filter {
-      padding: 32px 2px;
-      color: var(--text-secondary);
-      font-size: 14px;
-    }
+    .note-button[aria-current="page"] { font-weight: 600; }
 
-    .editor-page {
-      width: min(var(--editor-width), calc(100vw - 96px));
-      margin: 0 auto;
-      padding: 80px 0 160px;
-    }
-
-    .editor-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 28px;
-      margin-bottom: 28px;
-      color: var(--text-muted);
-      font-size: 12px;
-    }
-
-    .save-status[data-state="saving"]::before,
-    .save-status[data-state="saved"]::before,
-    .save-status[data-state="error"]::before {
-      display: inline-block;
-      width: 6px;
-      height: 6px;
-      margin-right: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      content: "";
-      vertical-align: 1px;
-    }
-
-    .save-status[data-state="saving"] { color: var(--text-secondary); }
-    .save-status[data-state="saved"] { color: #4f8b66; }
-    .save-status[data-state="error"] { color: var(--danger); }
-
-    .editor-title {
-      width: 100%;
-      margin-bottom: 30px;
-      padding: 0 0 14px;
-      border: 0;
-      border-bottom: 1px solid transparent;
-      border-radius: 0;
-      background: transparent;
-      font-size: 28px;
-      font-weight: 500;
-      line-height: 1.35;
-      letter-spacing: -0.035em;
-    }
-
-    .editor-title:hover,
-    .editor-title:focus { border-color: var(--border); outline: 0; }
-
-    .editor-textarea {
-      display: block;
-      width: 100%;
-      min-height: 52vh;
-      padding: 0;
-      resize: none;
-      overflow: hidden;
-      border: 0;
-      background: transparent;
-      color: var(--text);
-      line-height: var(--editor-line-height);
-    }
-
-    .editor-textarea:focus { outline: 0; }
-
-    .editor-page:has(.editor-textarea:focus) {
-      box-shadow: -3px 0 0 -1px var(--selection);
-    }
-
-    .editor-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 72px;
-      padding-top: 18px;
-      border-top: 1px solid var(--border);
-      font-size: 12px;
-    }
-
-    .editor-actions { display: flex; gap: 24px; }
-
-    .settings-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-top: 48px;
+    .empty-list {
+      margin: 12px;
+      color: var(--panel-muted);
     }
 
     .settings-card {
-      display: flex;
-      min-height: 230px;
-      flex-direction: column;
-      padding: 26px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-    }
-
-    .card-kicker {
-      margin: 0 0 16px;
-      color: var(--text-muted);
-      font-size: 11px;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+      margin-top: 16px;
+      padding: 14px 16px 3px;
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      background: var(--panel-surface);
     }
 
     .card-title {
-      margin: 0 0 12px;
-      font-size: 17px;
-      font-weight: 500;
+      margin: 4px 0 7px;
+      color: var(--panel-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
     }
 
-    .card-copy {
-      margin: 0 0 24px;
-      color: var(--text-secondary);
-      font-size: 13px;
-      line-height: 1.6;
+    .setting-row {
+      display: grid;
+      grid-template-columns: 1fr minmax(96px, auto);
+      gap: 14px;
+      align-items: center;
+      min-height: 54px;
+      border-top: 1px solid #eeeeef;
     }
 
-    .settings-card .secondary-button { margin-top: auto; align-self: start; }
+    .setting-row:first-of-type { border-top: 0; }
 
-    .privacy-note {
-      margin-top: 20px;
-      padding: 22px 0;
-      border-top: 1px solid var(--border);
-      color: var(--text-secondary);
-      font-size: 13px;
+    .setting-label { color: var(--panel-text); }
+
+    .color-control {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
     }
 
-    .privacy-note strong { color: var(--text); font-weight: 500; }
+    .color-picker {
+      width: 32px;
+      height: 28px;
+      padding: 2px;
+      border: 1px solid #cfd1d7;
+      border-radius: 7px;
+      background: #fff;
+    }
+
+    .hex-input {
+      width: 65px;
+      padding: 4px 0;
+      border: 0;
+      background: transparent;
+      color: #737a91;
+      font-family: "Courier New", monospace;
+      font-size: 12px;
+    }
+
+    .select,
+    .number-input {
+      height: 40px;
+      border: 1px solid #dedfe4;
+      border-radius: 9px;
+      background: #fff;
+      color: #20243a;
+    }
+
+    .select {
+      width: 144px;
+      padding: 0 34px 0 12px;
+    }
+
+    .number-input {
+      width: 82px;
+      padding: 0 10px;
+      text-align: center;
+    }
+
+    .contrast-warning {
+      margin: 10px 0 14px;
+      color: var(--danger);
+      font-size: 12px;
+    }
+
+    .drawer-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .secondary-action,
+    .danger-action {
+      flex: 1;
+      min-height: 40px;
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      background: var(--panel-bg);
+      color: var(--panel-text);
+    }
+
+    .danger-action { color: var(--danger); }
+
+    .local-note {
+      margin: 20px 4px 0;
+      color: var(--panel-muted);
+      font-size: 12px;
+    }
 
     .dialog {
-      width: min(520px, calc(100vw - 80px));
-      padding: 0;
-      border: 1px solid var(--border);
-      border-radius: 2px;
-      background: var(--bg);
-      color: var(--text);
-      box-shadow: 0 24px 80px rgba(0, 0, 0, .18);
+      width: min(440px, calc(100vw - 80px));
+      padding: 26px;
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      background: var(--panel-bg);
+      color: var(--panel-text);
+      font-family: Arial, sans-serif;
     }
 
-    .dialog::backdrop { background: rgba(0, 0, 0, .28); }
+    .dialog::backdrop { background: rgba(14, 22, 28, .5); }
 
-    .dialog-inner { padding: 30px; }
+    .dialog h2 { margin: 0 0 10px; font-size: 18px; }
 
-    .dialog-title { margin: 0 0 12px; font-size: 18px; font-weight: 500; }
+    .dialog p { margin: 0 0 24px; color: #737a91; font-size: 14px; }
 
-    .dialog-copy { margin: 0 0 28px; color: var(--text-secondary); font-size: 13px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-    .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .dialog-actions button {
+      min-height: 40px;
+      padding: 0 15px;
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      background: #fff;
+      color: var(--panel-text);
+    }
+
+    .dialog-actions .confirm-delete {
+      border-color: var(--danger);
+      background: var(--danger);
+      color: #fff;
+    }
 
     .toast {
       position: fixed;
-      z-index: 30;
+      z-index: 60;
       left: 50%;
-      bottom: 28px;
+      bottom: 26px;
       max-width: 520px;
-      padding: 11px 16px;
-      transform: translate(-50%, 20px);
-      border: 1px solid var(--border);
-      background: var(--text);
-      color: var(--bg);
-      font-size: 12px;
+      padding: 10px 14px;
+      transform: translate(-50%, 16px);
+      border-radius: 9px;
+      background: #fff;
+      color: #30364e;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
       opacity: 0;
       pointer-events: none;
-      transition: opacity .15s ease, transform .15s ease;
+      transition: opacity 140ms ease, transform 140ms ease;
     }
 
     .toast.is-visible { transform: translate(-50%, 0); opacity: 1; }
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #1c1c1e;
-        --surface: #222224;
-        --text: #f2f2f2;
-        --text-secondary: #9a9a9a;
-        --text-muted: #666666;
-        --border: #343434;
-        --selection: #31445c;
-        --danger: #e47d72;
-        --danger-soft: #352321;
-        --focus: #86b7e7;
-      }
-
-      .dialog { box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }
-    }
-
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+      *, *::before, *::after { transition: none !important; }
     }
   </style>
 </head>
 <body>
-  <a class="skip-link" href="#main">Przejdź do treści</a>
+  <button class="menu-button" id="open-drawer" type="button" aria-controls="left-drawer" aria-expanded="false" aria-label="Otwórz notatki i ustawienia">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+    </svg>
+  </button>
 
-  <header class="app-header">
-    <button class="brand" type="button" data-view-target="list">lokalne notatki</button>
-    <span class="route-label" id="route-label">/</span>
-    <nav class="header-actions" aria-label="Główna nawigacja">
-      <button class="text-button" type="button" data-view-target="list" aria-current="page">notatki</button>
-      <button class="text-button" type="button" data-view-target="settings">ustawienia</button>
-    </nav>
-  </header>
-
-  <main id="main">
-    <section class="view" id="view-list" data-view="list" aria-labelledby="notes-heading">
-      <div class="page">
-        <h1 class="page-heading" id="notes-heading">Notatki</h1>
-        <p class="page-lead">Proste miejsce na tekst, który zostaje w tej przeglądarce.</p>
-
-        <aside class="local-notice" id="local-notice">
-          <span class="notice-mark" aria-hidden="true"></span>
-          <span>Notatki są zapisywane tylko lokalnie. Wyczyść dane przeglądarki, a znikną — pamiętaj o kopii zapasowej.</span>
-          <button class="notice-close" id="notice-close" type="button" aria-label="Zamknij komunikat">×</button>
-        </aside>
-
-        <form class="create-form" id="create-form">
-          <label>
-            <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Tytuł nowej notatki</span>
-            <input class="field" id="new-note-title" type="text" placeholder="Tytuł nowej notatki" autocomplete="off">
-          </label>
-          <button class="primary-button" type="submit">Utwórz notatkę</button>
-        </form>
-
-        <div class="list-heading">
-          <h2 class="section-title">Ostatnio edytowane</h2>
-          <label class="search-label">
-            <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Szukaj notatek</span>
-            <input class="field" id="search" type="search" placeholder="Szukaj po tytule">
-          </label>
-        </div>
-
-        <ul class="notes-list" id="notes-list">
-          <li data-title="pomysły na weekend">
-            <button class="note-link" type="button" data-open-note="Pomysły na weekend">
-              <span class="note-title">Pomysły na weekend</span>
-              <time class="note-date" datetime="2026-09-04T13:42:00Z">dzisiaj, 15:42</time>
-            </button>
-          </li>
-          <li data-title="plan projektu lokalne notatki">
-            <button class="note-link" type="button" data-open-note="Plan projektu — lokalne notatki">
-              <span class="note-title">Plan projektu — lokalne notatki</span>
-              <time class="note-date" datetime="2026-09-03T17:20:00Z">wczoraj, 19:20</time>
-            </button>
-          </li>
-          <li data-title="książki do przeczytania">
-            <button class="note-link" type="button" data-open-note="Książki do przeczytania">
-              <span class="note-title">Książki do przeczytania</span>
-              <time class="note-date" datetime="2026-08-31T08:05:00Z">31.08.2026</time>
-            </button>
-          </li>
-          <li data-title="luźne myśli">
-            <button class="note-link" type="button" data-open-note="Luźne myśli">
-              <span class="note-title">Luźne myśli</span>
-              <time class="note-date" datetime="2026-08-27T21:15:00Z">27.08.2026</time>
-            </button>
-          </li>
-        </ul>
-        <p class="empty-filter" id="empty-filter" hidden>Nie znaleziono notatek.</p>
-      </div>
-    </section>
-
-    <section class="view" id="view-editor" data-view="editor" aria-labelledby="editor-title" hidden>
-      <div class="editor-page">
-        <div class="editor-meta">
-          <button class="text-button" type="button" data-view-target="list">← wszystkie notatki</button>
-          <span class="save-status" id="save-status" data-state="saved" role="status" aria-live="polite">Zapisano lokalnie</span>
-        </div>
-
-        <label>
-          <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Tytuł notatki</span>
-          <input class="editor-title" id="editor-title" value="Pomysły na weekend" autocomplete="off">
-        </label>
-
-        <label>
-          <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Treść notatki</span>
-          <textarea class="editor-textarea" id="editor-content" spellcheck="true">Sobota
+  <main class="editor-shell">
+    <div class="editor">
+      <label>
+        <span class="visually-hidden">Tytuł notatki</span>
+        <input class="editor-title" id="editor-title" value="Pomysły na weekend" placeholder="Bez tytułu" autocomplete="off">
+      </label>
+      <label>
+        <span class="visually-hidden">Treść notatki</span>
+        <textarea class="editor-content" id="editor-content" placeholder="Zacznij pisać…" spellcheck="true">Sobota
 
 Spacer po lesie rano, zanim zrobi się tłoczno. Zabrać termos i aparat.
 
@@ -600,179 +441,275 @@ Po południu przeczytać jeden dłuższy tekst — bez nadrabiania całej listy.
 Niedziela
 
 Spokojny dzień w domu. Przygotować plan tylko na poniedziałek.</textarea>
-        </label>
-
-        <footer class="editor-footer">
-          <span id="updated-time">Ostatnia zmiana: dzisiaj, 15:42</span>
-          <div class="editor-actions">
-            <button class="text-button" type="button" data-demo-message="Makieta: tutaj zostałby pobrany plik TXT.">eksportuj .txt</button>
-            <button class="text-button danger" id="delete-open" type="button">usuń</button>
-          </div>
-        </footer>
-      </div>
-    </section>
-
-    <section class="view" id="view-settings" data-view="settings" aria-labelledby="settings-heading" hidden>
-      <div class="page">
-        <h1 class="page-heading" id="settings-heading">Ustawienia</h1>
-        <p class="page-lead">Kopia zapasowa lokalnych danych. Aplikacja nie korzysta z konta ani chmury.</p>
-
-        <div class="settings-grid">
-          <article class="settings-card">
-            <p class="card-kicker">Eksport</p>
-            <h2 class="card-title">Zapisz kopię notatek</h2>
-            <p class="card-copy">Pobierz wszystkie notatki w jednym wersjonowanym pliku JSON.</p>
-            <button class="secondary-button" type="button" data-demo-message="Makieta: tutaj zostałaby pobrana kopia JSON.">Pobierz kopię JSON</button>
-          </article>
-
-          <article class="settings-card">
-            <p class="card-kicker">Import</p>
-            <h2 class="card-title">Odtwórz z kopii</h2>
-            <p class="card-copy">Wybierz wcześniej wyeksportowany plik. Przed importem zobaczysz podsumowanie konfliktów.</p>
-            <button class="secondary-button" type="button" data-demo-message="Makieta: tutaj otworzyłby się wybór pliku JSON.">Wybierz plik JSON</button>
-          </article>
-        </div>
-
-        <p class="privacy-note"><strong>Prywatność:</strong> treść i tytuły notatek nie są wysyłane ani interpretowane. Dane pozostają w profilu tej przeglądarki do czasu ich usunięcia.</p>
-      </div>
-    </section>
+      </label>
+    </div>
   </main>
 
-  <dialog class="dialog" id="delete-dialog">
-    <div class="dialog-inner">
-      <h2 class="dialog-title">Usunąć „<span id="delete-note-name">Pomysły na weekend</span>”?</h2>
-      <p class="dialog-copy">Ta operacja trwale usunie notatkę z tej przeglądarki. Nie można jej cofnąć.</p>
-      <div class="dialog-actions">
-        <button class="secondary-button" id="delete-cancel" type="button">Anuluj</button>
-        <button class="danger-button" id="delete-confirm" type="button">Usuń notatkę</button>
+  <button class="backdrop" id="drawer-backdrop" type="button" tabindex="-1" aria-label="Zamknij panel"></button>
+
+  <aside class="drawer" id="left-drawer" aria-label="Notatki i ustawienia" aria-hidden="true">
+    <div class="drawer-inner">
+      <header class="drawer-header">
+        <h1 class="drawer-title">Lokalne notatki</h1>
+        <button class="icon-button" id="close-drawer" type="button" aria-label="Zamknij panel">×</button>
+      </header>
+
+      <button class="primary-action" id="new-note" type="button">+ Nowa notatka</button>
+
+      <label>
+        <span class="visually-hidden">Szukaj notatek</span>
+        <input class="search" id="note-search" type="search" placeholder="Szukaj po tytule">
+      </label>
+
+      <p class="section-label">Ostatnio edytowane</p>
+      <ul class="notes-list" id="notes-list">
+        <li data-title="pomysły na weekend">
+          <button class="note-button" type="button" data-note="Pomysły na weekend" aria-current="page">Pomysły na weekend</button>
+        </li>
+        <li data-title="plan projektu lokalne notatki">
+          <button class="note-button" type="button" data-note="Plan projektu — lokalne notatki">Plan projektu — lokalne notatki</button>
+        </li>
+        <li data-title="książki do przeczytania">
+          <button class="note-button" type="button" data-note="Książki do przeczytania">Książki do przeczytania</button>
+        </li>
+        <li data-title="luźne myśli">
+          <button class="note-button" type="button" data-note="Luźne myśli">Luźne myśli</button>
+        </li>
+      </ul>
+      <p class="empty-list" id="empty-list" hidden>Nie znaleziono notatek.</p>
+
+      <section class="settings-card" aria-labelledby="appearance-title">
+        <h2 class="card-title" id="appearance-title">Appearance</h2>
+        <label class="setting-row">
+          <span class="setting-label">Background</span>
+          <span class="color-control">
+            <input class="color-picker" id="background-color" type="color" value="#233d4d">
+            <input class="hex-input" id="background-hex" value="#233d4d" aria-label="Kolor tła w formacie hex" maxlength="7">
+          </span>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Font Color</span>
+          <span class="color-control">
+            <input class="color-picker" id="text-color" type="color" value="#fe7f2d">
+            <input class="hex-input" id="text-hex" value="#fe7f2d" aria-label="Kolor tekstu w formacie hex" maxlength="7">
+          </span>
+        </label>
+        <p class="contrast-warning" id="contrast-warning" hidden>Wybrane kolory mają zbyt niski kontrast.</p>
+      </section>
+
+      <section class="settings-card" aria-labelledby="typography-title">
+        <h2 class="card-title" id="typography-title">Typography</h2>
+        <label class="setting-row">
+          <span class="setting-label">Font</span>
+          <select class="select" id="font-family">
+            <option selected>Courier New</option>
+            <option>Consolas</option>
+            <option>Georgia</option>
+            <option>Arial</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Font Size</span>
+          <select class="select" id="font-size">
+            <option value="11">11pt</option>
+            <option value="12">12pt</option>
+            <option value="13" selected>13pt</option>
+            <option value="14">14pt</option>
+            <option value="16">16pt</option>
+            <option value="18">18pt</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Line Height</span>
+          <input class="number-input" id="line-height" type="number" min="1.2" max="2.4" step="0.1" value="1.8">
+        </label>
+        <label class="setting-row">
+          <span class="setting-label">Width (px)</span>
+          <input class="number-input" id="editor-width" type="number" min="480" max="1200" step="10" value="920">
+        </label>
+      </section>
+
+      <div class="drawer-actions">
+        <button class="secondary-action" id="export-text" type="button">Eksportuj .txt</button>
+        <button class="danger-action" id="delete-note" type="button">Usuń</button>
       </div>
+
+      <p class="local-note">Notatki pozostają wyłącznie w tej przeglądarce. Makieta nie zapisuje wprowadzonych danych.</p>
+    </div>
+  </aside>
+
+  <dialog class="dialog" id="delete-dialog">
+    <h2>Usunąć „<span id="delete-title">Pomysły na weekend</span>”?</h2>
+    <p>Ta operacja trwale usunie notatkę z tej przeglądarki.</p>
+    <div class="dialog-actions">
+      <button id="cancel-delete" type="button">Anuluj</button>
+      <button class="confirm-delete" id="confirm-delete" type="button">Usuń notatkę</button>
     </div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <span class="mockup-label">makieta · dane przykładowe</span>
 
   <script>
     (() => {
-      const views = [...document.querySelectorAll('[data-view]')];
-      const routeLabel = document.querySelector('#route-label');
-      const navButtons = [...document.querySelectorAll('.header-actions [data-view-target]')];
-      const editorTitle = document.querySelector('#editor-title');
-      const editorContent = document.querySelector('#editor-content');
-      const saveStatus = document.querySelector('#save-status');
+      const root = document.documentElement;
+      const drawer = document.querySelector('#left-drawer');
+      const backdrop = document.querySelector('#drawer-backdrop');
+      const openButton = document.querySelector('#open-drawer');
+      const closeButton = document.querySelector('#close-drawer');
+      const titleInput = document.querySelector('#editor-title');
+      const contentInput = document.querySelector('#editor-content');
       const deleteDialog = document.querySelector('#delete-dialog');
       const toast = document.querySelector('#toast');
-      let saveTimer;
       let toastTimer;
 
-      const slugify = (value) => value
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '') || 'nowa-notatka';
-
-      const showView = (name) => {
-        views.forEach((view) => { view.hidden = view.dataset.view !== name; });
-        navButtons.forEach((button) => {
-          const active = button.dataset.viewTarget === name || (name === 'editor' && button.dataset.viewTarget === 'list');
-          if (active) button.setAttribute('aria-current', 'page');
-          else button.removeAttribute('aria-current');
-        });
-
-        routeLabel.textContent = name === 'list'
-          ? '/'
-          : name === 'settings'
-            ? '/ustawienia'
-            : `/notatki/${slugify(editorTitle.value)}`;
-        document.querySelector(`[data-view="${name}"]`).querySelector('h1, input, textarea, button')?.focus({ preventScroll: true });
-        window.scrollTo(0, 0);
+      const contents = {
+        'Pomysły na weekend': contentInput.value,
+        'Plan projektu — lokalne notatki': 'Najważniejsze założenie: edytor ma znikać za tekstem.\n\nLista notatek i ustawienia są dostępne dopiero po otwarciu panelu.',
+        'Książki do przeczytania': 'Four Thousand Weeks — Oliver Burkeman\n\nHow to Listen with Intention — Patrick King',
+        'Luźne myśli': 'Mniej elementów na ekranie. Więcej miejsca na sam tekst.'
       };
 
-      const openEditor = (title) => {
-        editorTitle.value = title;
-        document.querySelector('#delete-note-name').textContent = title;
-        showView('editor');
+      const openDrawer = () => {
+        drawer.classList.add('is-open');
+        backdrop.classList.add('is-visible');
+        drawer.setAttribute('aria-hidden', 'false');
+        openButton.setAttribute('aria-expanded', 'true');
+        closeButton.focus();
       };
 
-      const announce = (message) => {
+      const closeDrawer = () => {
+        drawer.classList.remove('is-open');
+        backdrop.classList.remove('is-visible');
+        drawer.setAttribute('aria-hidden', 'true');
+        openButton.setAttribute('aria-expanded', 'false');
+        openButton.focus();
+      };
+
+      const showToast = (message) => {
         clearTimeout(toastTimer);
         toast.textContent = message;
         toast.classList.add('is-visible');
-        toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 2600);
+        toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 2200);
       };
 
-      const scheduleMockSave = () => {
-        clearTimeout(saveTimer);
-        saveStatus.dataset.state = 'saving';
-        saveStatus.textContent = 'Niezapisane zmiany';
-        saveTimer = setTimeout(() => {
-          saveStatus.textContent = 'Zapisywanie…';
-          setTimeout(() => {
-            saveStatus.dataset.state = 'saved';
-            saveStatus.textContent = 'Zapisano lokalnie';
-            document.querySelector('#updated-time').textContent = 'Ostatnia zmiana: przed chwilą';
-          }, 360);
-        }, 400);
+      const isHex = (value) => /^#[0-9a-f]{6}$/i.test(value);
+
+      const luminance = (hex) => {
+        const rgb = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
+          .map((value) => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+        return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
       };
 
-      document.querySelectorAll('[data-view-target]').forEach((button) => {
-        button.addEventListener('click', () => showView(button.dataset.viewTarget));
+      const updateContrast = () => {
+        const background = document.querySelector('#background-color').value;
+        const text = document.querySelector('#text-color').value;
+        const lighter = Math.max(luminance(background), luminance(text));
+        const darker = Math.min(luminance(background), luminance(text));
+        document.querySelector('#contrast-warning').hidden = (lighter + .05) / (darker + .05) >= 4.5;
+      };
+
+      const bindColor = (pickerSelector, hexSelector, property) => {
+        const picker = document.querySelector(pickerSelector);
+        const hex = document.querySelector(hexSelector);
+
+        picker.addEventListener('input', () => {
+          hex.value = picker.value;
+          root.style.setProperty(property, picker.value);
+          updateContrast();
+        });
+
+        hex.addEventListener('change', () => {
+          const value = hex.value.trim();
+          if (!isHex(value)) {
+            hex.value = picker.value;
+            showToast('Podaj kolor w formacie #RRGGBB.');
+            return;
+          }
+          picker.value = value;
+          root.style.setProperty(property, value);
+          updateContrast();
+        });
+      };
+
+      openButton.addEventListener('click', openDrawer);
+      closeButton.addEventListener('click', closeDrawer);
+      backdrop.addEventListener('click', closeDrawer);
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && drawer.classList.contains('is-open')) closeDrawer();
       });
 
-      document.querySelectorAll('[data-open-note]').forEach((button) => {
-        button.addEventListener('click', () => openEditor(button.dataset.openNote));
+      document.querySelector('#new-note').addEventListener('click', () => {
+        titleInput.value = '';
+        contentInput.value = '';
+        document.querySelectorAll('.note-button').forEach((button) => button.removeAttribute('aria-current'));
+        closeDrawer();
+        titleInput.focus();
       });
 
-      document.querySelector('#create-form').addEventListener('submit', (event) => {
-        event.preventDefault();
-        const input = document.querySelector('#new-note-title');
-        const title = input.value.trim();
-        if (!title) {
-          input.focus();
-          announce('Podaj tytuł nowej notatki.');
-          return;
-        }
-        editorContent.value = '';
-        openEditor(title);
+      document.querySelectorAll('.note-button').forEach((button) => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('.note-button').forEach((item) => item.removeAttribute('aria-current'));
+          button.setAttribute('aria-current', 'page');
+          titleInput.value = button.dataset.note;
+          contentInput.value = contents[button.dataset.note] || '';
+          document.querySelector('#delete-title').textContent = button.dataset.note;
+          closeDrawer();
+          contentInput.focus();
+        });
       });
 
-      document.querySelector('#search').addEventListener('input', (event) => {
+      document.querySelector('#note-search').addEventListener('input', (event) => {
         const query = event.target.value.trim().toLocaleLowerCase('pl');
-        const items = [...document.querySelectorAll('#notes-list > li')];
         let visible = 0;
-        items.forEach((item) => {
+        document.querySelectorAll('#notes-list > li').forEach((item) => {
           item.hidden = !item.dataset.title.includes(query);
           if (!item.hidden) visible += 1;
         });
-        document.querySelector('#empty-filter').hidden = visible !== 0;
+        document.querySelector('#empty-list').hidden = visible > 0;
       });
 
-      document.querySelector('#notice-close').addEventListener('click', () => {
-        document.querySelector('#local-notice').hidden = true;
+      titleInput.addEventListener('input', () => {
+        document.querySelector('#delete-title').textContent = titleInput.value.trim() || 'Bez tytułu';
       });
 
-      editorTitle.addEventListener('input', () => {
-        routeLabel.textContent = `/notatki/${slugify(editorTitle.value)}`;
-        document.querySelector('#delete-note-name').textContent = editorTitle.value || 'Bez tytułu';
-        scheduleMockSave();
-      });
-      editorContent.addEventListener('input', scheduleMockSave);
+      bindColor('#background-color', '#background-hex', '--editor-bg');
+      bindColor('#text-color', '#text-hex', '--editor-text');
 
-      document.querySelector('#delete-open').addEventListener('click', () => deleteDialog.showModal());
-      document.querySelector('#delete-cancel').addEventListener('click', () => deleteDialog.close());
-      document.querySelector('#delete-confirm').addEventListener('click', () => {
+      document.querySelector('#font-family').addEventListener('change', (event) => {
+        const family = event.target.value.includes(' ') ? `"${event.target.value}"` : event.target.value;
+        root.style.setProperty('--editor-font-family', `${family}, monospace`);
+      });
+      document.querySelector('#font-size').addEventListener('change', (event) => {
+        root.style.setProperty('--editor-font-size', `${event.target.value}pt`);
+      });
+      document.querySelector('#line-height').addEventListener('input', (event) => {
+        root.style.setProperty('--editor-line-height', event.target.value);
+      });
+      document.querySelector('#editor-width').addEventListener('input', (event) => {
+        root.style.setProperty('--editor-width', `${event.target.value}px`);
+      });
+
+      document.querySelector('#export-text').addEventListener('click', () => {
+        const blob = new Blob([contentInput.value], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${(titleInput.value || 'bez-tytulu').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`;
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+
+      document.querySelector('#delete-note').addEventListener('click', () => deleteDialog.showModal());
+      document.querySelector('#cancel-delete').addEventListener('click', () => deleteDialog.close());
+      document.querySelector('#confirm-delete').addEventListener('click', () => {
         deleteDialog.close();
-        announce('Makieta: notatka zostałaby trwale usunięta.');
-        showView('list');
-      });
-      deleteDialog.addEventListener('click', (event) => {
-        if (event.target === deleteDialog) deleteDialog.close();
+        titleInput.value = '';
+        contentInput.value = '';
+        closeDrawer();
+        showToast('Makieta: notatka zostałaby usunięta.');
       });
 
-      document.querySelectorAll('[data-demo-message]').forEach((button) => {
-        button.addEventListener('click', () => announce(button.dataset.demoMessage));
-      });
+      updateContrast();
     })();
   </script>
 </body>

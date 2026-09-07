@@ -2,132 +2,106 @@
 
 ## 1. Goals
 
-Projekt techniczny opisuje statyczną, desktopową aplikację typu SPA do tworzenia, edytowania, wyszukiwania, zmiany nazwy, usuwania oraz ręcznego eksportowania i importowania zwykłych notatek tekstowych.
+Projekt opisuje statyczną, desktopową aplikację SPA do tworzenia i edytowania lokalnych notatek tekstowych. Interfejs jest zorganizowany wokół jednego, pełnoekranowego edytora. Lista notatek i ustawienia wyglądu są dostępne w wysuwanym panelu po lewej stronie.
 
 Aplikacja musi:
 
 - działać bez backendu, kont użytkowników i synchronizacji;
-- przechowywać notatki wyłącznie lokalnie w IndexedDB bieżącego profilu przeglądarki;
+- przechowywać notatki wyłącznie w IndexedDB bieżącego profilu przeglądarki;
+- przechowywać ustawienia wyglądu w `localStorage`;
 - identyfikować notatkę wewnętrznie przez UUID, a w adresie przez unikalny slug;
-- obsługiwać trasy `/`, `/notatki/:slug` i `/ustawienia`, również po bezpośrednim wejściu na adres hostowany przez GitHub Pages;
-- automatycznie zapisywać treść po krótkiej bezczynności i jednoznacznie pokazywać stan zapisu;
-- działać po utracie połączenia z internetem, jeżeli zasoby aplikacji zostały wcześniej załadowane;
-- nie interpretować ani nie wysyłać treści, tytułów i slugów notatek;
-- umożliwiać odtworzenie danych z ręcznie wyeksportowanej kopii JSON;
-- zapewniać główne przepływy dostępne z klawiatury i zgodne co najmniej z WCAG 2.1 AA.
+- obsługiwać trasy `/` i `/notatki/:slug`, również po bezpośrednim wejściu na GitHub Pages;
+- automatycznie zapisywać treść po 400 ms bezczynności;
+- wyświetlać ostatnio edytowane notatki w panelu bocznym bez dat i statystyk;
+- umożliwiać zmianę kolorów, fontu, rozmiaru, interlinii i szerokości edytora;
+- działać offline po wcześniejszym załadowaniu zasobów;
+- traktować zawartość jako zwykły tekst;
+- nie implementować importu ani eksportu JSON;
+- zapewniać główne przepływy z klawiatury i zgodność co najmniej z WCAG 2.1 AA.
 
 ## 2. Assumptions
 
-- Repozytorium będzie zawierało jedną aplikację frontendową, a wynik kompilacji będzie publikowany jako statyczny katalog.
-- Docelowy prefiks GitHub Pages, np. `/nazwa-repo/`, będzie podawany podczas budowania przez konfigurację Vite. Logiczne trasy opisane w PRD nie zawierają tego prefiksu.
-- Slug powstaje z pełnego tytułu przed ograniczeniem długości; po normalizacji zostaje skrócony do maksymalnie 80 znaków, a końcowy myślnik po skróceniu jest usuwany.
-- Zarezerwowane slugi na pierwszym segmencie to `notatki` i `ustawienia`. Walidacja listy jest scentralizowana, aby można ją było rozszerzyć tylko w razie dodania nowych tras.
-- Dla konfliktu przy tworzeniu aplikacja proponuje pierwszy wolny wariant liczbowy (`slug-2`, `slug-3`, ...), ale użytkownik zatwierdza utworzenie. Przy zmianie nazwy konflikt blokuje zapis, zgodnie z PRD.
-- Wejście na nieistniejący `/notatki/:slug` nie tworzy rekordu. Rekord powstaje przy pierwszej zmianie treści; tytuł początkowy jest czytelną wersją sluga, którą użytkownik może zmienić.
-- Bezpośrednia edycja tytułu jest traktowana jako operacja zmiany nazwy i podlega walidacji sluga przed utrwaleniem.
-- Automatyczny zapis jest uruchamiany 400 ms po ostatniej zmianie, czyli wewnątrz zakresu 300–500 ms z PRD.
-- Daty są przechowywane w UTC jako ISO 8601, a wyświetlane w lokalnej strefie i formacie przeglądarki.
-- Lista notatek jest sortowana malejąco według `updatedAt`; wyszukiwanie nazwy nie uwzględnia wielkości liter.
-- Import działa jako poprzedzony podsumowaniem konfliktów proces dla całego pliku. Użytkownik wybiera sposób rozwiązania każdego konfliktu albo jedną regułę dla wszystkich konfliktów.
-- Konflikt importu oznacza zajęty `slug`. Przy zastąpieniu istniejący rekord zachowuje własne `id`, a pozostałe pola przyjmuje z importu. Pozwala to zachować lokalną tożsamość rekordu.
-- Import nie usuwa lokalnych notatek nieobecnych w kopii zapasowej.
-- Potwierdzenie usunięcia zawiera nazwę notatki, ale nie wymaga jej ręcznego przepisywania.
-- Opcjonalny licznik słów nie należy do MVP i nie jest częścią tego projektu.
-- CSS z sekcji 11.1 PRD jest normatywną bazą wizualną MVP. Techniczne uzupełnienia są dozwolone tylko dla dostępności, pozostałych widoków i lokalnego osadzenia fontu.
-- Klasy `.focus-muted` i `.focus-active` nie oznaczają implementacji Focus Mode; ta funkcja pozostaje poza MVP.
-- Ustawienia interfejsu obejmują na tym etapie wyłącznie zaakceptowanie komunikatu o lokalnym charakterze danych; stan ten może być zapisany w `localStorage`.
-- Nie jest wymagane odzyskiwanie notatek po wyczyszczeniu danych strony ani po odrzuceniu przez przeglądarkę operacji zapisu.
+- Repozytorium zawiera jedną aplikację frontendową, a wynik kompilacji jest publikowany jako statyczny katalog.
+- Docelowy prefiks GitHub Pages jest podawany podczas budowania przez konfigurację Vite. Trasy logiczne nie zawierają tego prefiksu.
+- `/` otwiera rekord o najwyższym `updatedAt`. Jeżeli baza jest pusta, pokazuje pusty, jeszcze niezapisany edytor.
+- Kliknięcie „Nowa notatka” czyści roboczy stan edytora, ale nie tworzy rekordu. Rekord powstaje przy pierwszej zmianie tytułu lub treści.
+- Nowa notatka bez nazwy otrzymuje tytuł „Bez tytułu” i pierwszy wolny slug z serii `bez-tytulu`, `bez-tytulu-2`, ... dopiero podczas pierwszego zapisu.
+- Wejście na nieistniejący `/notatki/:slug` pokazuje pusty edytor. Rekord powstaje przy pierwszej zmianie; początkowy tytuł jest czytelną wersją sluga.
+- Zmiana tytułu generuje nowy slug. Przy konflikcie używany jest pierwszy wolny wariant liczbowy, a użytkownik otrzymuje dyskretną informację.
+- `updatedAt` jest technicznym polem do sortowania. Nie jest wyświetlane i nie służy do statystyk.
+- Panel boczny jest domyślnie zamknięty. Jego stan nie musi być zachowywany między uruchomieniami.
+- Ustawienia wyglądu obowiązują globalnie dla wszystkich notatek i są stosowane natychmiast.
+- Wartości kolorów są zapisywane jako znormalizowane sześciocyfrowe wartości hex.
+- Font wybierany jest z krótkiej listy bezpiecznych fontów systemowych. Implementacja nie pobiera fontów z zewnętrznego CDN.
+- Domyślne wartości wyglądu są zgodne z referencją: tło `#233d4d`, tekst `#fe7f2d`, Courier New, 13pt, interlinia 1.8, szerokość 920 px.
+- Opcjonalny eksport `.txt` dotyczy wyłącznie bieżącej notatki. Brak importu, eksportu zbiorczego i modułu kopii zapasowych.
+- Nie jest wymagane odzyskiwanie notatek po wyczyszczeniu danych strony.
 
 ## 3. Technology Stack
 
 | Obszar | Wybór | Uzasadnienie |
 | --- | --- | --- |
-| Framework / runtime | Preact 10, TypeScript, współczesna przeglądarka | Mały rozmiar aplikacji, prosty model komponentów i zgodność z rekomendacją PRD. Aplikacja nie wymaga runtime'u serwerowego. |
-| Narzędzie budowania | Vite | Zapewnia prosty build statyczny, konfigurowalny `base`, obsługę TypeScript i integrację z Preact. |
-| Dostęp do danych | Biblioteka `idb` nad natywnym IndexedDB | Zachowuje model i transakcje IndexedDB, ograniczając ilość technicznego kodu opartego na zdarzeniach. Nie wprowadza warstwy ORM. |
-| Routing | Własny mały moduł nad History API | MVP ma tylko trzy wzorce tras. Osobna biblioteka routingu nie daje istotnej korzyści, a moduł może jawnie obsłużyć `base` GitHub Pages. |
-| Offline cache | Service worker generowany podczas builda przez `vite-plugin-pwa`/Workbox w trybie precache | Gwarantuje ponowne uruchomienie aplikacji bez sieci po wcześniejszym załadowaniu zasobów. Cache obejmuje wyłącznie pliki aplikacji. |
-| UI | Semantyczny HTML, lokalny CSS i lokalnie dostarczany IBM Plex Mono z fallbackami systemowymi | Zachowuje minimalistyczny, skupiony na tekście styl z PRD bez frameworka UI ani zależności od zewnętrznego CDN. |
-| Testy | Vitest, Testing Library dla Preact, `fake-indexeddb` | Narzędzia współpracują z Vite i pozwalają testować komponenty oraz kontrakt magazynu bez prawdziwej przeglądarki. |
-| Hosting | GitHub Pages | Spełnia wymaganie statycznego hostingu; wynik nie wymaga funkcji serwerowych. |
-| Storage | IndexedDB dla notatek; `localStorage` wyłącznie dla niewrażliwego potwierdzenia komunikatu | Rozdzielenie jest zgodne z PRD i nie umieszcza treści notatek w synchronicznym magazynie ustawień. |
+| Framework / runtime | Preact 10, TypeScript | Mały rozmiar aplikacji i prosty model komponentów. |
+| Narzędzie budowania | Vite | Statyczny build, TypeScript i konfigurowalny `base` dla GitHub Pages. |
+| Dane notatek | `idb` nad IndexedDB | Asynchroniczny zapis, transakcje i indeksy bez rozbudowanej warstwy danych. |
+| Preferencje UI | Natywny `localStorage` | Mały, niewrażliwy i synchronicznie odczytywany zestaw ustawień. |
+| Routing | Mały moduł nad History API | Aplikacja ma tylko dwa wzorce tras. |
+| Offline | `vite-plugin-pwa` / Workbox w trybie precache | Ponowne uruchomienie bez sieci po pierwszym załadowaniu. |
+| UI | Semantyczny HTML i lokalny CSS | Brak potrzeby frameworka komponentów wizualnych. |
+| Testy | Vitest, Testing Library, `fake-indexeddb` | Testy komponentów i magazynu bez prawdziwej przeglądarki. |
+| Hosting | GitHub Pages | Spełnia wymaganie statycznego hostingu. |
 
-Build produkcyjny tworzy katalog `dist/` zawierający `index.html`, zasoby z fingerprintami, service worker i `404.html`. Wartość `base` jest parametrem konfiguracji, dzięki czemu ten sam kod może być zbudowany dla domeny głównej albo ścieżki repozytorium.
-
-Wszystkie biblioteki są dołączane do lokalnego bundla. Aplikacja nie korzysta w czasie działania z CDN ani innych zewnętrznych skryptów.
-
-### Visual design and typography
-
-Plik `src/styles.css` implementuje referencyjny CSS z sekcji 11.1 PRD. Główne tokeny pozostają zdefiniowane jako custom properties:
-
-- kolory jasnego motywu: `#ffffff`, `#1a1a1a`, `#8f8f8f`, `#b5b5b5`, `#e8e8e8`, `#d9ecff`;
-- kolory ciemnego motywu: `#1c1c1e`, `#f2f2f2`, `#9a9a9a`, `#666666`, `#343434`, `#31445c`;
-- szerokość edytora: `68ch`;
-- bazowy rozmiar pisma: `18px`;
-- interlinia: `1.6`;
-- odstęp między literami: `-0.01em`.
-
-IBM Plex Mono jest przechowywany jako lokalny plik WOFF2 i deklarowany przez `@font-face`; aplikacja nie pobiera fontu z Google Fonts ani innego CDN. Stos awaryjny to `"SFMono-Regular", Consolas, "Liberation Mono", monospace`.
-
-Widok edytora używa wyśrodkowanej kolumny `min(68ch, calc(100vw - 96px))`, pionowych odstępów `80px 0 160px` oraz pola edycji bez obramowania, tła i możliwości zmiany rozmiaru. Pozostałe widoki używają tej samej palety i typografii, ale mogą stosować węższe, semantyczne kontrolki formularzy.
-
-Ciemny motyw jest wybierany automatycznie przez `prefers-color-scheme: dark`; MVP nie wymaga ręcznego przełącznika. Reguła `outline: 0` dla pola tekstowego nie może usuwać informacji o fokusie dla użytkownika klawiatury: fokus musi być widoczny przez kursor tekstowy lub dyskretny styl kontenera spełniający WCAG 2.1 AA. Przy `prefers-reduced-motion` aplikacja nie dodaje ruchu; dekoracyjne animacje pozostają zabronione.
+Build produkcyjny tworzy `dist/` z `index.html`, zasobami z fingerprintami, service workerem i `404.html`. Aplikacja nie korzysta w czasie działania z CDN, API ani zewnętrznych skryptów.
 
 ## 4. Architecture
 
-Architektura pozostaje jednowarstwową aplikacją frontendową z wyraźnym oddzieleniem UI, logiki domenowej i dostępu do przeglądarkowych API.
-
-```text
-Widoki i komponenty Preact
-            ↓
-Stan aplikacji i operacje na notatkach
-       ↙           ↘
-Routing/History API  Repozytorium notatek
-                           ↓
-                       IndexedDB
-
-Eksport/import plików ↔ Operacje na notatkach
-Service worker        → Cache zasobów aplikacji
+```mermaid
+flowchart TD
+    Shell[App shell] --> Editor[Editor]
+    Shell --> Drawer[Left drawer]
+    Editor --> Actions[Note operations]
+    Drawer --> Actions
+    Actions --> Repo[Note repository]
+    Repo --> DB[(IndexedDB)]
+    Drawer --> Prefs[Preferences]
+    Prefs --> LS[(localStorage)]
 ```
 
 Główne elementy:
 
-- **App shell** — rozpoznaje bieżącą trasę, pokazuje właściwy widok i komunikat o lokalnym charakterze danych.
-- **Widok listy** — tworzenie notatki, filtrowanie po tytule, lista posortowana według ostatniej modyfikacji oraz przejście do ustawień.
-- **Widok edytora** — ładowanie notatki po slugu, lokalny stan tytułu i treści, automatyczny zapis, zmiana nazwy, eksport `.txt` oraz usuwanie.
-- **Widok ustawień** — eksport kompletnej kopii JSON, wybór pliku do importu, walidacja i rozwiązywanie konfliktów.
-- **Operacje na notatkach** — generowanie i walidacja slugów, tworzenie UUID, reguły zmiany nazwy i przygotowanie importu. Nie przechowują własnej kopii danych.
-- **Repozytorium notatek** — jedyne miejsce wykonujące odczyty, zapisy, usunięcia oraz transakcje IndexedDB.
-- **Moduł routingu** — usuwa bazowy prefiks z adresu, rozpoznaje trasę, wykonuje nawigację i reaguje na `popstate`.
-- **Moduł kopii zapasowych** — serializuje dane do wersjonowanego JSON, waliduje import i przygotowuje wynik konfliktów przed zapisem.
-- **Service worker** — przechowuje wyłącznie skompilowane zasoby aplikacji. Nie odczytuje ani nie przechwytuje danych notatek.
+- **App shell** — rozpoznaje trasę, ładuje notatkę startową, kontroluje panel boczny i obsługuje błędy globalne.
+- **Editor** — przechowuje roboczy tytuł i treść, uruchamia auto-save i nie renderuje metadanych.
+- **Left drawer** — tworzenie notatki, filtrowanie i wybór tytułu, ustawienia wyglądu oraz działania dla bieżącej notatki.
+- **Note operations** — generowanie slugów, tworzenie UUID, zmiana nazwy i koordynacja zapisu.
+- **Note repository** — jedyne miejsce wykonujące operacje na IndexedDB.
+- **Preferences** — walidacja, odczyt i zapis ustawień oraz wystawienie ich jako CSS custom properties.
+- **Routing** — obsługa `base`, History API i `popstate`.
+- **Service worker** — precache zasobów aplikacji; nie ma dostępu do treści notatek.
 
-Nie jest potrzebny globalny framework zarządzania stanem. Stan listy i edytora pozostaje w odpowiednich widokach; po trwałej operacji źródłem prawdy jest repozytorium IndexedDB.
+Nie jest potrzebny globalny framework stanu. Stan bieżącej notatki i panelu pozostaje w `App`; trwałym źródłem prawdy są IndexedDB i `localStorage`.
 
 ## 5. Project Structure
 
 ```text
 /
 ├── public/
-│   ├── fonts/
-│   │   └── ibm-plex-mono-regular.woff2
 │   └── 404.html
 ├── src/
 │   ├── components/
-│   │   ├── LocalDataNotice.tsx
-│   │   └── SaveStatus.tsx
-│   ├── views/
-│   │   ├── NotesListView.tsx
-│   │   ├── NoteEditorView.tsx
-│   │   ├── SettingsView.tsx
-│   │   └── NotFoundView.tsx
-│   ├── notes.ts
-│   ├── noteRepository.ts
-│   ├── backup.ts
-│   ├── routing.ts
-│   ├── types.ts
+│   │   ├── Editor.tsx
+│   │   ├── LeftDrawer.tsx
+│   │   ├── NotesList.tsx
+│   │   ├── AppearanceSettings.tsx
+│   │   ├── DeleteNoteDialog.tsx
+│   │   └── ErrorToast.tsx
 │   ├── app.tsx
 │   ├── main.tsx
+│   ├── noteOperations.ts
+│   ├── noteRepository.ts
+│   ├── preferences.ts
+│   ├── routing.ts
+│   ├── slug.ts
+│   ├── types.ts
 │   └── styles.css
 ├── tests/
 │   ├── unit/
@@ -138,9 +112,7 @@ Nie jest potrzebny globalny framework zarządzania stanem. Stan listy i edytora 
 └── package.json
 ```
 
-Podział grupuje jedynie elementy, które mają odrębne odpowiedzialności. Moduły nie są dzielone na dodatkowe warstwy domenowe, serwisy i adaptery, dopóki nie wynika to z rzeczywistej złożoności.
-
-`404.html` jest samodzielnym statycznym dokumentem, ponieważ GitHub Pages musi go zwrócić przed uruchomieniem aplikacji. Jego odpowiedzialność ogranicza się do przekazania żądanej ścieżki do `index.html`.
+Nie ma osobnych widoków listy i ustawień ani modułu `backup.ts`.
 
 ## 6. Data Model
 
@@ -148,47 +120,41 @@ Podział grupuje jedynie elementy, które mają odrębne odpowiedzialności. Mod
 
 ```ts
 interface Note {
-  id: string;        // UUID, primary key
+  id: string;
   title: string;
-  slug: string;      // unique index, max 80 characters
-  content: string;   // plain text
-  createdAt: string; // UTC, ISO 8601
-  updatedAt: string; // UTC, ISO 8601
+  slug: string;
+  content: string;
+  updatedAt: number;
 }
 ```
 
-### Backup file
+- `id` jest UUID i kluczem głównym.
+- `slug` jest unikalnym indeksem używanym przez routing.
+- `updatedAt` jest znacznikiem czasu Unix w milisekundach używanym wyłącznie do sortowania.
+- Model nie zawiera statystyk, liczby słów, historii zmian ani daty utworzenia.
+
+### Editor preferences
 
 ```ts
-interface NotesBackupV1 {
-  format: "local-notes-backup";
-  version: 1;
-  exportedAt: string; // UTC, ISO 8601
-  notes: Note[];
+interface EditorPreferences {
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: "Courier New" | "Consolas" | "Georgia" | "Arial";
+  fontSizePt: number;
+  lineHeight: number;
+  editorWidthPx: number;
 }
 ```
 
-Stałe pole `format` zapobiega potraktowaniu dowolnego JSON jako kopii aplikacji. `version` umożliwia jednoznaczne odrzucenie nieobsługiwanego formatu albo jego migrację w przyszłości bez zgadywania struktury.
+Dozwolone zakresy:
 
-### Import preview
+| Pole | Zakres |
+| --- | --- |
+| `fontSizePt` | 10–24 pt |
+| `lineHeight` | 1.2–2.4 |
+| `editorWidthPx` | 480–1200 px |
 
-```ts
-type ImportConflictResolution = "skip" | "replace" | "new-slug";
-
-interface ImportConflict {
-  importedNote: Note;
-  existingNote: Note;
-  resolution?: ImportConflictResolution;
-  proposedSlug?: string; // used for "new-slug"
-}
-
-interface ImportPreview {
-  notesWithoutConflicts: Note[];
-  conflicts: ImportConflict[];
-}
-```
-
-Model podglądu jest krótkotrwałym stanem UI. Nie jest zapisywany w IndexedDB.
+Nieprawidłowe dane z `localStorage` są odrzucane pole po polu i zastępowane wartością domyślną.
 
 ### Save state
 
@@ -196,274 +162,231 @@ Model podglądu jest krótkotrwałym stanem UI. Nie jest zapisywany w IndexedDB.
 type SaveState = "unchanged" | "dirty" | "saving" | "saved" | "error";
 ```
 
-Stan służy wyłącznie do sterowania komunikatem i ostrzeżeniem przed opuszczeniem strony; nie jest częścią modelu notatki.
+Stan jest wewnętrzny. Tylko `error` wymaga widocznego komunikatu. `dirty` służy do ostrzeżenia przed opuszczeniem strony.
 
 ## 7. Storage
 
-### Lokalizacja i schemat
+### IndexedDB
 
-- Baza IndexedDB: `local-notes`.
-- Początkowa wersja schematu: `1`.
+- Baza: `local-notes`.
+- Wersja schematu: `1`.
 - Object store: `notes`.
 - Klucz główny: `id`.
 - Unikalny indeks: `slug`.
-- Indeks do listowania: `updatedAt`.
-- Klucz `localStorage`: `local-notes:data-notice-dismissed:v1`, zawierający wyłącznie wartość logiczną potwierdzenia komunikatu.
+- Indeks do sortowania: `updatedAt`.
 
-Unikalny indeks `slug` egzekwuje najważniejszy warunek także na poziomie magazynu, a nie tylko UI. UUID pozwala zmienić slug bez zmiany wewnętrznej tożsamości notatki.
+Repozytorium udostępnia minimalny kontrakt:
 
-### Odczyt
+```ts
+interface NoteRepository {
+  getBySlug(slug: string): Promise<Note | undefined>;
+  getMostRecent(): Promise<Note | undefined>;
+  listMostRecent(): Promise<Note[]>;
+  save(note: Note): Promise<void>;
+  delete(id: string): Promise<void>;
+  isSlugAvailable(slug: string, exceptId?: string): Promise<boolean>;
+}
+```
 
-- Widok edytora wyszukuje rekord przez unikalny indeks `slug`.
-- Widok listy pobiera wszystkie rekordy i prezentuje je malejąco według `updatedAt`.
-- Brak rekordu dla poprawnego sluga jest prawidłowym pustym stanem, a nie błędem magazynu.
+`listMostRecent` korzysta z indeksu `updatedAt` w kierunku malejącym. UI renderuje tylko `title` i `slug`.
 
-### Zapis
+### localStorage
 
-- Zapis pojedynczej notatki odbywa się w jednej transakcji `readwrite`.
-- Nowa notatka otrzymuje UUID oraz jednakowe `createdAt` i `updatedAt` w momencie pierwszego zapisu.
-- Kolejne zapisy zachowują `id` i `createdAt`, a aktualizują `content` oraz `updatedAt`.
-- Zmiana nazwy aktualizuje `title`, `slug` i `updatedAt` w jednej transakcji. Adres zmienia się dopiero po powodzeniu transakcji.
-- Import zapisuje wybrane rekordy w jednej transakcji, aby nie pozostawić częściowo zaimportowanego zestawu w razie błędu.
+| Klucz | Zawartość |
+| --- | --- |
+| `local-notes:preferences:v1` | Ustawienia wyglądu |
+| `local-notes:data-notice-dismissed:v1` | Flaga zamknięcia komunikatu |
 
-### Brakujące i uszkodzone dane
+Zapis preferencji jest wykonywany po każdej poprawnej zmianie. CSS jest aktualizowany przed zapisem, dzięki czemu kontrolki działają natychmiast.
 
-- Brak bazy lub store przy pierwszym uruchomieniu powoduje utworzenie schematu wersji 1.
-- Brak notatki pod slugiem pokazuje pusty edytor i komunikat z PRD.
-- Rekord niespełniający modelu `Note` nie jest prezentowany ani nadpisywany automatycznie. UI pokazuje błąd odczytu i sugeruje eksport pozostałych danych, jeżeli eksport jest możliwy.
-- Błąd otwarcia IndexedDB, transakcji, limitu pojemności lub odmowa dostępu pozostawiają edytowane dane w stanie `error`; aplikacja nie pokazuje statusu „Zapisano lokalnie”.
-- Uszkodzony lub nieobsługiwany plik importu jest odrzucany przed rozpoczęciem transakcji.
-- Aplikacja nie próbuje odbudowywać ani pobierać danych z sieci.
+### Błędy
+
+- Błąd odczytu notatki pokazuje komunikat i nie nadpisuje rekordu.
+- Błąd zapisu pozostawia najnowszą treść w pamięci widoku, ustawia stan `error` i umożliwia ponowienie po kolejnej zmianie.
+- Błąd preferencji przywraca wyłącznie uszkodzone pole do wartości domyślnej.
+- Aplikacja nie próbuje pobierać ani odzyskiwać danych z sieci.
 
 ## 8. Routing
 
-### Trasy logiczne
-
-| Trasa | Widok |
+| Trasa | Zachowanie |
 | --- | --- |
-| `/` | Lista notatek |
-| `/notatki/:slug` | Edytor istniejącej albo jeszcze nieutworzonej notatki |
-| `/ustawienia` | Kopia zapasowa i ustawienia |
-| Inna trasa | Lokalny widok „Nie znaleziono strony” z powrotem do listy |
+| `/` | Pobranie najnowszej notatki lub nowy pusty edytor |
+| `/notatki/:slug` | Pobranie wskazanej notatki lub roboczy pusty edytor |
+| Inna | Komunikat błędu z działaniem „Otwórz edytor” |
 
-Moduł routingu rozdziela:
+Moduł routingu oddziela `base path`, np. `/local-notes-editor/`, od logicznej ścieżki. Nawigacja pomiędzy notatkami korzysta z `history.pushState`. Zmiana sluga bieżącej notatki korzysta z `history.replaceState`.
 
-- `base path`, np. `/nazwa-repo/`, wynikający z konfiguracji Vite;
-- logiczną ścieżkę aplikacji, np. `/notatki/moj-pomysl`.
+### GitHub Pages direct link
 
-Nawigacja wewnątrz aplikacji korzysta z `history.pushState`. Zmiana sluga bieżącej notatki korzysta z `history.replaceState`. Zdarzenie `popstate` powoduje ponowne rozpoznanie trasy i bezpieczne zakończenie lub zachowanie bieżącej edycji zależnie od stanu zapisu.
+`404.html` przekazuje żądaną ścieżkę do bazowego `index.html`. Kod startowy natychmiast odtwarza trasę przez `history.replaceState` przed renderowaniem. Mechanizm przekazuje wyłącznie ścieżkę zawierającą slug; treść i tytuł nie trafiają do URL.
 
-Slug pobrany z URL jest dekodowany i walidowany według tych samych reguł co slug generowany z tytułu. Niepoprawny slug prowadzi do widoku nieznalezionej strony, a nie do utworzenia rekordu.
+## 9. UI Design
 
-### Bezpośrednie wejście na GitHub Pages
+### Editor surface
 
-GitHub Pages zwraca `404.html` dla nieistniejącego fizycznie pliku. Dokument `404.html` zachowuje logiczną ścieżkę wraz z query stringiem w krótkotrwałym parametrze przekierowania i przechodzi do bazowego `index.html`. Kod startowy odczytuje parametr, natychmiast usuwa go przez `history.replaceState` i odtwarza właściwą trasę przed renderowaniem widoku.
+Główny obszar zajmuje cały viewport i używa następujących custom properties:
 
-Parametr przekierowania zawiera wyłącznie ścieżkę i techniczne parametry wejściowe. Treść, tytuł i dane notatki nigdy nie trafiają do URL. Ponieważ slug już jest częścią docelowego adresu, jego obecność w przekazanej ścieżce jest nieunikniona i zgodna z modelem routingu PRD.
+```css
+:root {
+  --editor-bg: #233d4d;
+  --editor-text: #fe7f2d;
+  --editor-font-family: "Courier New", monospace;
+  --editor-font-size: 13pt;
+  --editor-line-height: 1.8;
+  --editor-width: 920px;
+}
+```
 
-Ograniczenia:
+Edytor zawiera tylko:
 
-- mechanizm wymaga poprawnej wartości `base` dla konkretnego sposobu publikacji;
-- bezpośrednie wejście wykonuje jedno dodatkowe przekierowanie po stronie klienta;
-- JavaScript musi być włączony;
-- adres pod ścieżką repozytorium zawsze zawiera jej prefiks; usunięcie prefiksu wymaga własnej domeny lub repozytorium użytkownika.
+- dyskretny przycisk otwarcia panelu w lewym górnym rogu;
+- pole tytułu;
+- pole treści;
+- toast renderowany wyłącznie dla błędu lub działania wymagającego potwierdzenia.
 
-## 9. Main Application Flows
+Nie renderuje paska aplikacji, sluga, dat, statusu udanego zapisu, licznika słów ani stopki. Pola mają przezroczyste tło i brak ramek. Kolumna jest wyśrodkowana i ma `width: min(var(--editor-width), calc(100vw - 96px))`.
 
-### Create note from the start page
+### Left drawer
 
-1. Użytkownik podaje tytuł.
-2. Aplikacja normalizuje tytuł do sluga i sprawdza jego poprawność.
-3. Repozytorium sprawdza, czy slug jest wolny.
-4. Przy konflikcie aplikacja pokazuje proponowany pierwszy wolny wariant i oczekuje decyzji użytkownika.
-5. Po zatwierdzeniu aplikacja tworzy pusty rekord notatki i przechodzi do `/notatki/{slug}`.
+Panel ma szerokość 400 px, jasne tło i własne przewijanie. Jest renderowany nad edytorem, dzięki czemu otwarcie nie zmienia szerokości ani położenia tekstu.
 
-### Open note
+Kolejność zawartości:
 
-1. Router usuwa bazowy prefiks i odczytuje slug z URL.
-2. Aplikacja waliduje slug.
-3. Repozytorium wyszukuje notatkę po indeksie `slug`.
-4. Istniejąca notatka jest wyświetlana jako zwykły tekst.
-5. Dla braku notatki aplikacja pokazuje pusty edytor oraz informację, że notatka nie istnieje jeszcze w tej przeglądarce.
+1. zamknięcie panelu i „Nowa notatka”;
+2. wyszukiwarka;
+3. lista tytułów ostatnio edytowanych notatek;
+4. karta „Appearance”;
+5. karta „Typography”;
+6. eksport `.txt` i usunięcie bieżącej notatki;
+7. jednorazowa informacja o lokalnym przechowywaniu.
 
-### Auto-save note
+Panel używa tokenów niezależnych od kolorów edytora, aby pozostał czytelny przy dowolnej konfiguracji:
 
-1. Użytkownik zmienia treść.
-2. Lokalny stan przyjmuje wartość `dirty`, a poprzedni licznik opóźnienia zostaje zastąpiony nowym.
-3. Po 400 ms bezczynności stan zmienia się na `saving`.
-4. Repozytorium tworzy nowy rekord albo aktualizuje istniejący.
-5. Po zatwierdzeniu transakcji UI pokazuje „Zapisano lokalnie”; po błędzie zachowuje zmiany w pamięci widoku i pokazuje błąd.
-6. Jeżeli podczas zapisu pojawiły się kolejne znaki, po zakończeniu bieżącej transakcji wykonywany jest następny zapis najnowszej wersji.
+```css
+:root {
+  --panel-bg: #ffffff;
+  --panel-surface: #fafafa;
+  --panel-text: #2f3550;
+  --panel-muted: #959bb1;
+  --panel-border: #e5e5e8;
+}
+```
 
-### Rename note
+Karty ustawień mają promień 14 px, obramowanie 1 px i wiersze oddzielone linią. Etykieta jest po lewej, kontrolka po prawej. Kontrolki koloru obejmują natywny `input[type=color]` i edytowalne pole hex.
 
-1. Użytkownik zmienia tytuł i zatwierdza zmianę.
-2. Aplikacja generuje i waliduje nowy slug.
-3. Repozytorium sprawdza konflikt z inną notatką.
-4. Przy konflikcie dane i adres pozostają bez zmian, a UI pokazuje komunikat.
-5. Przy powodzeniu tytuł i slug są zapisywane w jednej transakcji.
-6. Aplikacja aktualizuje bieżący adres przez `history.replaceState`.
+### Drawer behavior and accessibility
+
+- Przycisk ma `aria-controls="left-drawer"` i aktualne `aria-expanded`.
+- Panel jest dialogiem niemodalnym wizualnie, ale po otwarciu utrzymuje fokus w swoim obrębie.
+- `Escape` zamyka panel i zwraca fokus do przycisku otwarcia.
+- Kliknięcie w półprzezroczystą warstwę nad edytorem zamyka panel.
+- Animacja używa wyłącznie `transform` i trwa maksymalnie 180 ms.
+- Przy `prefers-reduced-motion: reduce` panel zmienia stan bez animacji.
+
+## 10. Main Flows
+
+### Start application
+
+1. Odczytaj i zwaliduj preferencje.
+2. Zastosuj CSS custom properties przed pierwszym renderem edytora.
+3. Rozpoznaj trasę.
+4. Dla `/` pobierz ostatnio edytowaną notatkę; dla sluga pobierz wskazany rekord.
+5. Ustaw fokus w treści albo tytule pustego edytora.
+
+### Auto-save
+
+1. Zmiana tytułu lub treści ustawia `dirty` i restartuje timer 400 ms.
+2. Dla nowej notatki operacja tworzy UUID, bezpieczny tytuł i wolny slug.
+3. Dla istniejącej notatki zachowuje UUID i aktualizuje `updatedAt`.
+4. Repozytorium zapisuje rekord w pojedynczej transakcji `readwrite`.
+5. Po sukcesie aplikacja ustawia `saved`, aktualizuje trasę w razie potrzeby i odświeża kolejność panelu bez pokazywania statusu.
+6. Po błędzie ustawia `error` i pokazuje komunikat.
+7. Jeśli podczas transakcji pojawiły się kolejne zmiany, wykonywany jest następny zapis najnowszej wersji.
+
+### Open note from drawer
+
+1. Pobierz listę z indeksu `updatedAt` malejąco.
+2. Filtruj po tytule bez uwzględniania wielkości liter.
+3. Po wyborze zabezpiecz lub dokończ oczekujący zapis bieżącej notatki.
+4. Przejdź do `/notatki/{slug}`.
+5. Załaduj notatkę, zamknij panel i ustaw fokus w treści.
+
+### Change appearance
+
+1. Kontrolka waliduje wartość względem dozwolonego formatu i zakresu.
+2. Poprawna wartość aktualizuje odpowiednią custom property.
+3. Pełny obiekt preferencji jest zapisywany w `localStorage`.
+4. Dla kolorów obliczany jest kontrast; wynik poniżej 4.5:1 pokazuje ostrzeżenie w karcie.
 
 ### Delete note
 
-1. Użytkownik wybiera usunięcie.
-2. Aplikacja pokazuje potwierdzenie zawierające nazwę notatki i informację o trwałości operacji.
-3. Po zatwierdzeniu repozytorium usuwa rekord według UUID.
-4. Po powodzeniu aplikacja przechodzi na stronę startową.
-5. Po błędzie pozostaje w edytorze i pokazuje komunikat.
+1. Działanie z panelu otwiera dialog z tytułem notatki.
+2. Po potwierdzeniu repozytorium usuwa rekord według UUID.
+3. Aplikacja ładuje następną najnowszą notatkę lub pusty edytor.
+4. Trasa jest aktualizowana bez pozostawienia usuniętego sluga jako aktywnego widoku.
 
-### List and search notes
+### Export current note as TXT
 
-1. Widok pobiera lokalne notatki.
-2. Sortuje je malejąco według daty ostatniej modyfikacji.
-3. Wpisanie zapytania filtruje już pobraną listę po tytule bez uwzględniania wielkości liter.
-4. Wybranie wyniku przechodzi do jego trasy.
+1. Utwórz `Blob` typu `text/plain;charset=utf-8` wyłącznie z treści bieżącej notatki.
+2. Nazwa pliku pochodzi z bezpiecznego sluga.
+3. Uruchom pobranie i natychmiast zwolnij tymczasowy object URL.
 
-### Export all notes
+## 11. Offline, Privacy and Security
 
-1. Aplikacja pobiera wszystkie prawidłowe rekordy.
-2. Tworzy strukturę `NotesBackupV1` z datą eksportu.
-3. Serializuje ją do UTF-8 JSON.
-4. Przeglądarka zapisuje plik lokalnie po działaniu użytkownika.
+- Service worker precache'uje wyłącznie skompilowane zasoby.
+- Treść notatek nie przechodzi przez service worker i nie jest zapisywana w Cache Storage.
+- Brak fetchy do API, analityki i zewnętrznych fontów.
+- Tytuł i treść są wiązane jako wartości pól formularza, nigdy jako `innerHTML`.
+- Pola kolorów akceptują wyłącznie poprawny format hex.
+- CSP może działać bez `unsafe-inline` po przeniesieniu skryptu i CSS makiety do plików źródłowych podczas implementacji.
 
-### Export current note as text
+Rezygnacja z JSON oznacza brak mechanizmu kopii zapasowej. Informacja o lokalnym charakterze danych nie może sugerować możliwości odtworzenia notatek.
 
-1. Aplikacja pobiera aktualną, zapisaną wersję notatki albo najnowszy stan edytora.
-2. Tworzy plik UTF-8 `.txt` zawierający wyłącznie treść.
-3. Przeglądarka zapisuje plik lokalnie po działaniu użytkownika.
-
-### Import backup
-
-1. Użytkownik wybiera lokalny plik JSON.
-2. Aplikacja parsuje plik i waliduje format, wersję, kompletność pól, daty, UUID, slugi oraz unikalność slugów w samym pliku.
-3. Aplikacja porównuje importowane slugi z lokalnym magazynem.
-4. Pokazuje podsumowanie nowych notatek i wszystkich konfliktów bez zapisywania danych.
-5. Użytkownik wybiera dla konfliktów: pominięcie, zastąpienie albo nowy slug.
-6. Aplikacja ponownie waliduje wynikowy zestaw i zapisuje go w jednej transakcji.
-7. Po zatwierdzeniu transakcji pokazuje liczbę dodanych, zastąpionych i pominiętych notatek.
-
-### Leave editor with pending changes
-
-1. Nawigacja wewnętrzna lub zdarzenie zamknięcia strony sprawdza stan zapisu.
-2. Jeśli stan nie wskazuje niezapisanych zmian, aplikacja nie ostrzega.
-3. Jeśli istnieją niezapisane zmiany, aplikacja podejmuje natychmiastową próbę zapisu.
-4. Gdy zapis nie zakończy się przed opuszczeniem albo wcześniej wystąpił błąd, aplikacja używa standardowego ostrzeżenia przeglądarki.
-
-## 10. Error Handling
-
-| Sytuacja | Zachowanie |
-| --- | --- |
-| Pusty lub niepoprawny tytuł/slug | Operacja jest blokowana; UI wskazuje wymagany poprawny tytuł. Rekord nie powstaje. |
-| Zarezerwowany slug | Operacja jest blokowana z informacją o niedozwolonym adresie. |
-| Konflikt sluga | Tworzenie proponuje wolny wariant; zmiana nazwy pozostawia poprzednie dane i adres. |
-| Brak notatki pod poprawnym adresem | Pusty edytor i komunikat „Ta notatka nie istnieje jeszcze w tej przeglądarce”. |
-| Niepoprawna trasa lub slug w URL | Widok „Nie znaleziono strony”; bez automatycznego zapisu. |
-| IndexedDB niedostępne | Aplikacja pokazuje trwały komunikat, że zapis lokalny nie działa; nie deklaruje zapisania danych. |
-| Nieudany automatyczny zapis | Stan `error`, zachowanie bieżącej treści w pamięci widoku i możliwość ponowienia przez kolejną edycję; ostrzeżenie przy opuszczeniu. |
-| Brak miejsca | Tak jak błąd zapisu, z komunikatem sugerującym wykonanie eksportu `.txt` bieżącej treści. |
-| Błąd odczytu pojedynczego rekordu | Rekord nie jest renderowany jako częściowo poprawna notatka; UI zgłasza problem z lokalnymi danymi. |
-| Niepoprawny JSON lub niezgodna wersja kopii | Import zostaje zatrzymany przed zmianą danych i pokazuje przyczynę. |
-| Konflikty w imporcie bez decyzji | Przycisk zatwierdzający import pozostaje niedostępny. |
-| Błąd transakcji importu | Cały import jest wycofywany; lokalny stan sprzed importu pozostaje bez zmian. |
-| Nieudane usunięcie | Użytkownik pozostaje w edytorze, a notatka nie jest uznawana za usuniętą. |
-| Nieudane załadowanie aplikacji offline | Przeglądarka pokazuje własny błąd; aplikacja nie obiecuje pierwszego uruchomienia bez wcześniejszego cache. |
-
-Komunikaty błędów nie zawierają treści notatek. Aplikacja nie wysyła telemetrii błędów ani danych diagnostycznych do zewnętrznych usług.
-
-## 11. Testing Strategy
+## 12. Testing Strategy
 
 ### Unit tests
 
-Testów jednostkowych wymagają elementy zawierające deterministyczne reguły:
-
-- generowanie, skracanie i walidacja sluga;
-- rozpoznawanie tras z bazowym prefiksem;
-- walidacja modelu notatki i pliku kopii zapasowej;
-- przygotowanie podglądu konfliktów i wynikowych rekordów importu;
-- przejścia stanu automatycznego zapisu, w tym zmiana podczas trwającego zapisu;
-- formatowanie i sortowanie danych listy bez zależności od UI.
+- normalizacja tytułu i konflikty slugów;
+- walidacja oraz wartości domyślne preferencji;
+- obliczenie kontrastu kolorów;
+- wybór ostatnio edytowanej notatki;
+- filtrowanie listy po tytule;
+- mapowanie trasy z uwzględnieniem `base`.
 
 ### Integration tests
 
-Testy integracyjne w środowisku DOM z emulowanym IndexedDB powinny obejmować granice pomiędzy modułami:
+- pierwszy wpis tworzy notatkę i aktualizuje trasę;
+- auto-save zachowuje najnowszą wersję przy zmianach podczas transakcji;
+- `/` ładuje rekord o najwyższym `updatedAt`;
+- panel otwiera się, zamyka i poprawnie zarządza fokusem;
+- wybór notatki zamyka panel i zmienia trasę;
+- zmiana ustawienia natychmiast aktualizuje CSS i `localStorage`;
+- usunięcie otwiera następną notatkę;
+- błąd IndexedDB pozostawia dane w pamięci i pokazuje błąd;
+- w UI nie występują daty, statystyki ani akcje JSON.
 
-- operacje repozytorium, unikalność sluga i transakcyjność importu;
-- otwarcie istniejącej i brakującej notatki na podstawie trasy;
-- automatyczny zapis między edytorem a repozytorium;
-- zmianę nazwy wraz z aktualizacją URL dopiero po udanym zapisie;
-- tworzenie, usuwanie, eksport i import przez główne widoki;
-- zachowanie UI po błędzie magazynu.
+### Manual checks
 
-### Manual verification
-
-Manualnej weryfikacji w produkcyjnym buildzie wymagają zachowania zależne od prawdziwej przeglądarki i hostingu:
-
-- bezpośrednie wejście oraz odświeżenie każdej trasy na GitHub Pages dla domeny głównej i ścieżki repozytorium;
-- ponowne uruchomienie wcześniej załadowanej aplikacji w trybie offline;
-- brak żądań zawierających treść, tytuł, slug lub pełny URL notatki;
-- lokalne załadowanie IBM Plex Mono bez żądania do zewnętrznego CDN;
-- zgodność typografii, szerokości kolumny, odstępów, kolorów zaznaczenia oraz jasnego i ciemnego motywu z sekcją 11.1 PRD;
-- natywne cofanie/ponawianie w polu edycji oraz ostrzeżenie przy niezapisanych zmianach;
-- pobieranie plików JSON i `.txt` oraz wybór pliku importu;
-- nawigację samą klawiaturą, widoczny fokus, etykiety i kontrast głównych przepływów;
-- układ w Chrome, Edge i Firefox od rozdzielczości 1024 × 768 px;
-- zachowanie po wyczyszczeniu danych strony i w prywatnym profilu.
-
-## 12. Non-Functional Considerations
-
-### Performance and reliability
-
-- Aplikacja ma mały bundle: Preact, `idb`, kod aplikacji i kod offline bez frameworka UI ani globalnego store.
-- Editor renderuje zwykłe pole tekstowe i nie przetwarza treści podczas wpisywania poza aktualizacją stanu i opóźnionym zapisem.
-- Operacje IndexedDB są asynchroniczne. Żadna treść notatki nie jest zapisywana do `localStorage`.
-- Mechanizm auto-save rozróżnia zapis trwający od nowszych zmian, aby zakończenie starszej operacji nie oznaczyło nowszej treści jako zapisanej.
-- Service worker przechowuje statyczne zasoby z buildu, co pozwala uruchomić wcześniej załadowaną aplikację bez sieci.
-
-### Simplicity
-
-- Brak backendu, API, kont, synchronizacji, globalnego zarządzania stanem i dodatkowych warstw domenowych.
-- Jedno repozytorium obejmuje wszystkie operacje na jedynym trwałym modelu domenowym.
-- Trzy wzorce tras obsługuje mały moduł zamiast pełnej biblioteki routingu.
-
-### Security and privacy
-
-- Dane notatek pozostają w origin-specific IndexedDB przeglądarki i opuszczają je tylko w wyniku jawnego eksportu użytkownika.
-- Treść jest przypisywana do wartości pola tekstowego lub renderowana jako węzeł tekstowy; nie trafia do API interpretującego HTML.
-- Brak analityki, zewnętrznych skryptów, zdalnie pobieranych fontów, ikon i wywołań API wymaganych do działania. IBM Plex Mono jest częścią statycznego artefaktu aplikacji.
-- Tytuł i treść nie są umieszczane w tytule dokumentu, URL, logach ani cache service workera. Slug występuje wyłącznie w ścieżce zgodnie z PRD.
-- Produkcyjny build nie wymaga kodu inline, dzięki czemu hosting może zastosować CSP bez `unsafe-inline` dla skryptów.
-- Pliki importu są traktowane jako niezaufane dane i podlegają pełnej walidacji przed zapisem.
-
-### Browser and accessibility compatibility
-
-- Zakres wsparcia obejmuje aktualne desktopowe Chrome, Edge i Firefox.
-- UI jest projektowane dla szerokości od 1024 px, Windows 11, myszy i klawiatury; interfejs mobilny nie jest objęty zakresem.
-- Używane są semantyczne elementy formularzy, poprawne etykiety, logiczna kolejność fokusu, widoczny fokus, komunikaty statusu dostępne dla technologii asystujących oraz kontrast zgodny z WCAG 2.1 AA.
-- Aplikacja nie używa animacji dekoracyjnych ani istotnych działań dostępnych tylko po najechaniu.
-
-### Static hosting
-
-- Artefakt `dist/` składa się wyłącznie z plików statycznych.
-- Wszystkie odwołania do zasobów i tras uwzględniają konfigurowalny `base`.
-- `404.html` zapewnia wejście do SPA dla bezpośrednich adresów na GitHub Pages.
-- Aplikacja nie zakłada obecności rewrite rules, funkcji serwerowych ani nagłówków ustawianych dynamicznie.
+- bezpośrednie wejście na trasę GitHub Pages;
+- ponowne uruchomienie offline;
+- obsługa klawiaturą w Chrome, Edge i Firefox;
+- czytelność domyślnej palety i ostrzeżenie dla niskiego kontrastu;
+- układ przy 1024 × 768 oraz na szerokim ekranie.
 
 ## 13. Technical Decisions
 
-| Decision | Choice | Reason |
+| Decyzja | Wybór | Powód |
 | --- | --- | --- |
-| Model aplikacji | Statyczne SPA w Preact | Spełnia routing bez przeładowań, GitHub Pages i brak backendu przy małym narzucie. |
-| Trwały magazyn | IndexedDB przez `idb` | Asynchroniczne API, transakcje i indeksy przy minimalnym kodzie infrastrukturalnym. |
-| Tożsamość notatki | UUID jako klucz główny, unikalny slug jako indeks | Zmiana adresu nie zmienia tożsamości rekordu, a magazyn wymusza unikalność sluga. |
-| Routing | Własny moduł History API świadomy `base` | Trzy trasy nie uzasadniają zależności od routera; jawna obsługa prefiksu jest kluczowa dla GitHub Pages. |
-| Direct-link fallback | Statyczny `404.html` przekierowujący do `index.html` i odtworzenie trasy | GitHub Pages nie zapewnia natywnego fallbacku SPA. |
-| Strategia auto-save | Debounce 400 ms plus kolejny zapis dla zmian powstałych podczas transakcji | Spełnia docelowe opóźnienie i zapobiega utracie szybkich zmian. |
-| Działanie offline | Precache zasobów aplikacji przez wygenerowany service worker | Spełnia wymaganie działania bez sieci po wcześniejszym załadowaniu, bez cache'owania notatek. |
-| Format kopii | Wersjonowany pojedynczy plik JSON | Umożliwia walidację i pełne odtworzenie pól wymaganych przez PRD. |
-| Atomowość importu | Jedna transakcja IndexedDB po zatwierdzeniu konfliktów | Zapobiega częściowemu importowi. |
-| Interpretacja treści | Wyłącznie wartość pola tekstowego / węzeł tekstowy | Zachowuje format zwykłego tekstu oraz eliminuje wykonywanie Markdown i HTML. |
-| Biblioteki UI i stanu | Brak | Zakres nie uzasadnia dodatkowych abstrakcji ani zależności. |
-| Kierunek wizualny | Referencyjny CSS z PRD, lokalny IBM Plex Mono, automatyczny jasny/ciemny motyw | Zapewnia spójny, minimalistyczny interfejs skupiony na tekście bez zewnętrznych zależności runtime. |
+| Główny widok | Zawsze edytor | Eliminuje krok pośredni i utrzymuje koncentrację na tekście. |
+| Lista i ustawienia | Jeden wysuwany panel | Rzadziej używane elementy pozostają dostępne bez osobnych stron. |
+| Sortowanie | Wewnętrzne `updatedAt` | Pozwala pokazać ostatnie notatki bez eksponowania dat. |
+| Trwały magazyn | IndexedDB przez `idb` | Asynchroniczne API, indeksy i transakcje. |
+| Preferencje | `localStorage` + CSS custom properties | Natychmiastowy start i prosta aktualizacja wyglądu. |
+| Routing | Dwie trasy nad History API | Osobna biblioteka routingu nie daje korzyści przy tym zakresie. |
+| Auto-save | Debounce 400 ms | Spełnia wymaganie szybkiego zapisu bez przycisku. |
+| Status zapisu | Widoczny tylko błąd | Czysty edytor bez stałych metadanych. |
+| Kopia zapasowa | Brak JSON | Świadome uproszczenie zakresu zgodne z PRD 1.1. |
+| Kierunek wizualny | Konfigurowalny edytor, domyślnie navy/orange Courier New | Odwzorowuje załączoną referencję. |
 
 ## 14. Open Questions
 
@@ -471,8 +394,10 @@ None.
 
 ## Consistency Check
 
-- Wszystkie cele MVP, wymagania funkcjonalne, zasady przechowywania, routing GitHub Pages, prywatność, bezpieczeństwo, offline, dostępność i kompatybilność z PRD mają odpowiadające im decyzje lub przepływy techniczne.
-- Projekt nie obejmuje kont, backendu, synchronizacji, udostępniania, współdzielenia, historii wersji, załączników, Markdown, szyfrowania, aplikacji natywnej ani interfejsu mobilnego.
-- Opcjonalny licznik słów został jawnie pozostawiony poza MVP.
-- Dokument określa granice modułów, kontrakty danych, zachowanie magazynu, routing i decyzje architektoniczne, ale nie zawiera kolejności implementacji, listy tasków ani kodu aplikacji.
-- Kierunek wizualny z PRD ma odpowiadające decyzje dotyczące lokalnego fontu, tokenów CSS, geometrii edytora, jasnego i ciemnego motywu oraz dostępnego fokusu.
+- Dokument nie zawiera osobnej strony listy ani ustawień.
+- Lista notatek istnieje wyłącznie w wysuwanym panelu i nie pokazuje dat.
+- `updatedAt` jest wyłącznie technicznym kluczem sortowania.
+- Nie istnieje model kopii, import, eksport JSON ani rozwiązywanie konfliktów importu.
+- Edytor nie pokazuje statystyk, metadanych i stałego statusu udanego zapisu.
+- Ustawienia i domyślna paleta odpowiadają wartościom widocznym w referencji.
+- Projekt pozostaje zgodny ze statycznym hostingiem GitHub Pages i nie wymaga backendu.
