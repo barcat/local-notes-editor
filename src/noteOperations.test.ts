@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNote, createSaveCoordinator } from "./noteOperations";
+import { createNote, createSaveCoordinator, createTextExport } from "./noteOperations";
 import type { NoteRepository } from "./types";
 
 function repositoryWithSave(save: NoteRepository["save"]): NoteRepository {
@@ -74,5 +74,40 @@ describe("save coordinator", () => {
     await expect(coordinator.flush()).rejects.toBe(failure);
     expect(onError).toHaveBeenCalledWith(failure, expect.objectContaining({ content: "zachowaj mnie" }), true);
     coordinator.dispose();
+  });
+
+  it("cancels pending saves and waits for an active save before deletion", async () => {
+    let releaseSave: (() => void) | undefined;
+    const saveFinished = new Promise<void>((resolve) => { releaseSave = resolve; });
+    const stored = new Map<string, unknown>();
+    const note = createNote("Do usunięcia", "treść", 1);
+    const repository = repositoryWithSave(async (saved) => {
+      await saveFinished;
+      stored.set(saved.id, saved);
+    });
+    const coordinator = createSaveCoordinator({ repository, delay: 0 });
+
+    coordinator.schedule(note);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const cancellation = coordinator.cancelAndWait();
+    expect(stored.has(note.id)).toBe(false);
+    releaseSave?.();
+    await cancellation;
+    stored.delete(note.id);
+    expect(stored.has(note.id)).toBe(false);
+    coordinator.dispose();
+  });
+
+  it("creates a UTF-8 text export from the latest content", async () => {
+    const exported = createTextExport("Mój plan", "spacje  \n\nłódź <b>bez HTML</b>");
+    expect(exported.fileName).toBe("moj-plan.txt");
+    expect(exported.blob.type).toBe("text/plain;charset=utf-8");
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(exported.blob);
+    });
+    expect(text).toBe("spacje  \n\nłódź <b>bez HTML</b>");
   });
 });

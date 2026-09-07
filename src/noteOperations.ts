@@ -81,6 +81,7 @@ export interface SaveCoordinator {
   schedule(note: Note): number;
   flush(): Promise<Note | undefined>;
   cancel(): void;
+  cancelAndWait(): Promise<void>;
   dispose(): void;
 }
 
@@ -179,14 +180,26 @@ export function createSaveCoordinator({
     version += 1;
   };
 
+  const cancelAndWait = async (): Promise<void> => {
+    cancel();
+    if (active) await active;
+  };
+
   const dispose = () => {
     cancel();
     disposed = true;
   };
 
-  return { schedule, flush, cancel, dispose };
+  return { schedule, flush, cancel, cancelAndWait, dispose };
 }
 
 export function chooseAvailableSlug(baseSlug: string, occupiedSlugs: Iterable<string>): string {
   return firstAvailableSlug(baseSlug, occupiedSlugs);
+}
+
+export function createTextExport(title: string, content: string): { blob: Blob; fileName: string } {
+  return {
+    blob: new Blob([content], { type: "text/plain;charset=utf-8" }),
+    fileName: `${slugify(title)}.txt`,
+  };
 }

@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./components/Editor";
+import { DeleteNoteDialog } from "./components/DeleteNoteDialog";
 import { ErrorToast } from "./components/ErrorToast";
 import { LeftDrawer } from "./components/LeftDrawer";
-import { createNoteId, createSaveCoordinator } from "./noteOperations";
+import { createNoteId, createSaveCoordinator, createTextExport } from "./noteOperations";
 import { noteRepository } from "./noteRepository";
+import {
+  applyPreferences,
+  DEFAULT_PREFERENCES,
+  dismissDataNotice,
+  isDataNoticeDismissed,
+  loadPreferences,
+  sanitizePreferencesPatch,
+  savePreferences,
+} from "./preferences";
 import { buildEditorPath, parseRoute, pushEditorPath, replaceEditorPath, type Route } from "./routing";
-import type { Note, NoteDraft, NoteRepository } from "./types";
+import type { EditorPreferences, Note, NoteDraft, NoteRepository } from "./types";
 
 interface AppProps {
   repository?: NoteRepository;
   autoSaveDelay?: number;
+  initialPreferences?: EditorPreferences;
+  initialPreferencesError?: string | null;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -28,7 +40,7 @@ function routePath(route: Route): string {
   return route.kind === "editor" ? buildEditorPath(route.slug) : window.location.pathname;
 }
 
-export function App({ repository = noteRepository, autoSaveDelay }: AppProps) {
+export function App({ repository = noteRepository, autoSaveDelay, initialPreferences, initialPreferencesError }: AppProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [route, setRoute] = useState<Route>(() => parseRoute());
   const [draft, setDraft] = useState<NoteDraft>({ title: "", content: "" });
@@ -38,10 +50,44 @@ export function App({ repository = noteRepository, autoSaveDelay }: AppProps) {
   const [isDirty, setIsDirty] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [persistedNoteId, setPersistedNoteId] = useState<string | undefined>();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [preferences, setPreferences] = useState<EditorPreferences>(() => initialPreferences ?? loadPreferences().preferences);
+  const [preferencesStorageWarning, setPreferencesStorageWarning] = useState<string | null>(initialPreferencesError ?? null);
+  const [dataNoticeDismissed, setDataNoticeDismissed] = useState(() => isDataNoticeDismissed());
   const hasUserEditedRef = useRef(false);
   const acceptedPathRef = useRef(window.location.pathname);
   const navigationIdRef = useRef(0);
   const isNavigatingRef = useRef(false);
+  const preferencesRef = useRef(preferences);
+
+  useEffect(() => {
+    applyPreferences(preferences);
+  }, [preferences]);
+
+  const updatePreferences = useCallback((patch: Partial<EditorPreferences>) => {
+    const sanitizedPatch = sanitizePreferencesPatch(patch);
+    if (Object.keys(sanitizedPatch).length === 0) return;
+    const next = { ...preferencesRef.current, ...sanitizedPatch };
+    preferencesRef.current = next;
+    setPreferences(next);
+    applyPreferences(next);
+    const result = savePreferences(next);
+    setPreferencesStorageWarning(result.ok ? null : "Ustawienia działają tylko do zamknięcia tej karty — localStorage jest niedostępny.");
+  }, []);
+
+  const resetColors = useCallback(() => {
+    updatePreferences({
+      backgroundColor: DEFAULT_PREFERENCES.backgroundColor,
+      textColor: DEFAULT_PREFERENCES.textColor,
+    });
+  }, [updatePreferences]);
+
+  const dismissNotice = useCallback(() => {
+    const result = dismissDataNotice();
+    if (result.ok) setDataNoticeDismissed(true);
+    else setPreferencesStorageWarning("Nie udało się zapisać tej informacji — localStorage jest niedostępny.");
+  }, []);
 
   const refreshNotes = useCallback(async () => {
     setNotes(await repository.listMostRecent());
@@ -59,6 +105,7 @@ export function App({ repository = noteRepository, autoSaveDelay }: AppProps) {
       onSaved: (saved, isLatest) => {
         if (!isLatest) return;
         setDraft({ id: saved.id, title: saved.title, content: saved.content, slug: saved.slug });
+        setPersistedNoteId(saved.id);
         setIsDirty(false);
         setSaveError(null);
         if (!isNavigatingRef.current) {
@@ -99,6 +146,7 @@ export function App({ repository = noteRepository, autoSaveDelay }: AppProps) {
           setDraft(note
             ? { id: note.id, title: note.title, content: note.content, slug: note.slug }
             : { title: route.slug ? readableTitleFromSlug(route.slug) : "", content: "", slug: route.slug });
+          setPersistedNoteId(note?.id);
           setIsDirty(false);
           requestAnimationFrame(() => document.querySelector<HTMLInputElement | HTMLTextAreaElement>(note ? ".editor-content" : ".editor-title")?.focus());
         }
@@ -158,6 +206,7 @@ export function App({ repository = noteRepository, autoSaveDelay }: AppProps) {
       acceptedPathRef.current = buildEditorPath();
       setRoute(nextRoute);
       setDraft({ title: "", content: "" });
+      setPersistedNoteId(undefined);
       setIsDirty(false);
       setSaveError(null);
       closeDrawer();
@@ -222,6 +271,52 @@ export function App({ repository = noteRepository, autoSaveDelay }: AppProps) {
     setRoute({ kind: "editor" });
   }, []);
 
+  const exportCurrentNote = useCallback(() => {
+    const { blob, fileName } = createTextExport(draft.title, draft.content);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, [draft.content, draft.title]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!persistedNoteId) return;
+    const navigationId = ++navigationIdRef.current;
+    isNavigatingRef.current = true;
+    try {
+      await saveCoordinator.cancelAndWait();
+      if (navigationId !== navigationIdRef.current) return;
+      await repository.delete(persistedNoteId);
+      const remaining = await repository.listMostRecent();
+      if (navigationId !== navigationIdRef.current) return;
+
+      setNotes(remaining);
+      setPersistedNoteId(undefined);
+      setIsDeleteDialogOpen(false);
+      setIsDirty(false);
+      setSaveError(null);
+      hasUserEditedRef.current = false;
+
+      const nextNote = remaining[0];
+      if (nextNote) {
+        replaceEditorPath(nextNote.slug);
+        acceptedPathRef.current = buildEditorPath(nextNote.slug);
+        setRoute({ kind: "editor", slug: nextNote.slug });
+      } else {
+        replaceEditorPath();
+        acceptedPathRef.current = buildEditorPath();
+        setDraft({ title: "", content: "" });
+        setRoute({ kind: "editor" });
+      }
+    } catch (error) {
+      setSaveError(errorMessage(error, "Nie udało się usunąć notatki."));
+    } finally {
+      if (navigationId === navigationIdRef.current) isNavigatingRef.current = false;
+    }
+  }, [persistedNoteId, repository, saveCoordinator]);
+
   if (route.kind === "not-found") {
     return (
       <main class="route-error">
@@ -269,7 +364,24 @@ export function App({ repository = noteRepository, autoSaveDelay }: AppProps) {
         search={search}
         onSearchChange={setSearch}
         onSelectNote={(slug) => { void selectNote(slug); }}
+        preferences={preferences}
+        preferencesStorageWarning={preferencesStorageWarning}
+        onPreferencesChange={updatePreferences}
+        onResetColors={resetColors}
+        dataNoticeDismissed={dataNoticeDismissed}
+        onDismissDataNotice={dismissNotice}
+        canExport={Boolean(draft.id)}
+        canDelete={Boolean(persistedNoteId)}
+        onExport={exportCurrentNote}
+        onDelete={() => { closeDrawer(); setIsDeleteDialogOpen(true); }}
       />
+      {isDeleteDialogOpen && (
+        <DeleteNoteDialog
+          title={draft.title}
+          onCancel={() => setIsDeleteDialogOpen(false)}
+          onConfirm={() => { void confirmDelete(); }}
+        />
+      )}
       {visibleError && <ErrorToast message={visibleError} onDismiss={() => { setSaveError(null); setLoadError(null); }} />}
     </>
   );

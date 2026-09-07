@@ -76,4 +76,26 @@ describe("App shell", () => {
     await waitFor(() => expect(window.location.pathname).toBe("/notatki/starsza-notatka"));
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Starsza notatka"));
   });
+
+  it("cancels deletion or removes the current note and opens an empty editor", async () => {
+    const repository = createNoteRepository(`app-delete-test-${crypto.randomUUID()}`);
+    await saveNote(createNote("Do usunięcia", "treść", 10), repository, 10);
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Do usunięcia"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Usuń" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Usuń" }));
+    expect(screen.getByRole("dialog", { name: "Usunąć notatkę?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Anuluj" }));
+    expect(await repository.getBySlug("do-usuniecia")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Usuń" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Usuń" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usuń notatkę" }));
+    await waitFor(async () => expect(await repository.getBySlug("do-usuniecia")).toBeUndefined());
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+    expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("");
+  });
 });
