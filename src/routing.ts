@@ -2,6 +2,17 @@ export type Route =
   | { kind: "editor"; slug?: string }
   | { kind: "not-found"; path: string };
 
+export const PENDING_PATH_STORAGE_KEY = "local-notes:pending-path:v1";
+
+function getSessionStorage(): Pick<Storage, "getItem" | "removeItem"> | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 function normalizeBasePath(basePath: string): string {
   const withLeadingSlash = basePath.startsWith("/") ? basePath : `/${basePath}`;
   const withoutTrailingSlash = withLeadingSlash.replace(/\/+$/, "");
@@ -29,6 +40,25 @@ export function parseRoute(pathname = window.location.pathname, basePath = getBa
   if (noteMatch) return { kind: "editor", slug: decodeURIComponent(noteMatch[1]) };
 
   return { kind: "not-found", path: logicalPath };
+}
+
+export function restorePendingPath(
+  basePath = getBasePath(),
+  storage: Pick<Storage, "getItem" | "removeItem"> | undefined = getSessionStorage(),
+): string | undefined {
+  if (!storage) return undefined;
+
+  let pendingPath: string | null;
+  try {
+    pendingPath = storage.getItem(PENDING_PATH_STORAGE_KEY);
+    storage.removeItem(PENDING_PATH_STORAGE_KEY);
+  } catch {
+    return undefined;
+  }
+
+  if (!pendingPath || stripBasePath(pendingPath, basePath) === undefined) return undefined;
+  window.history.replaceState({}, "", pendingPath);
+  return pendingPath;
 }
 
 export function buildEditorPath(slug?: string, basePath = getBasePath()): string {
