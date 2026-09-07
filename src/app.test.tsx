@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
 import { App } from "./app";
+import { createNoteRepository } from "./noteRepository";
 
 describe("App shell", () => {
   it("opens the drawer, moves focus inside and closes it with Escape", async () => {
@@ -32,5 +33,22 @@ describe("App shell", () => {
 
     expect(title).toHaveValue("");
     expect(content).toHaveValue("");
+  });
+
+  it("autosaves a draft and restores it when the app is mounted again", async () => {
+    const repository = createNoteRepository(`app-test-${crypto.randomUUID()}`);
+    const firstRender = render(<App repository={repository} autoSaveDelay={0} />);
+
+    fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Trwała notatka" } });
+    fireEvent.input(screen.getByPlaceholderText("Zacznij pisać…"), { target: { value: "HTML <b>i Markdown **bez interpretacji**" } });
+    await waitFor(async () => {
+      const saved = await repository.getMostRecent();
+      expect(saved?.content).toBe("HTML <b>i Markdown **bez interpretacji**");
+    });
+
+    firstRender.unmount();
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Trwała notatka"));
+    expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue("HTML <b>i Markdown **bez interpretacji**");
   });
 });
