@@ -13,6 +13,17 @@ export interface NoteDraft {
   slug?: string;
 }
 
+export type EditorFontFamily = "Courier New" | "Consolas" | "Georgia" | "Arial";
+
+export interface EditorPreferences {
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: EditorFontFamily;
+  fontSizePt: number;
+  lineHeight: number;
+  editorWidthPx: number;
+}
+
 export type SaveState = "unchanged" | "dirty" | "saving" | "saved" | "error";
 
 export interface NoteRepository {

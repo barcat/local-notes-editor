@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { NotesList } from "./NotesList";
-import type { Note } from "../types";
+import type { EditorPreferences, Note } from "../types";
 
 interface LeftDrawerProps {
   isOpen: boolean;
@@ -11,6 +12,16 @@ interface LeftDrawerProps {
   search: string;
   onSearchChange: (value: string) => void;
   onSelectNote: (slug: string) => void;
+  preferences: EditorPreferences;
+  preferencesStorageWarning: string | null;
+  onPreferencesChange: (patch: Partial<EditorPreferences>) => void;
+  onResetColors: () => void;
+  dataNoticeDismissed: boolean;
+  onDismissDataNotice: () => void;
+  canExport: boolean;
+  canDelete: boolean;
+  onExport: () => void;
+  onDelete: () => void;
 }
 
 const focusableSelector = [
@@ -21,34 +32,26 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-interface ColorControlProps {
-  label: string;
-  property: string;
-  initialValue: string;
-}
-
-function ColorControl({ label, property, initialValue }: ColorControlProps) {
-  const [value, setValue] = useState(initialValue);
-
-  return (
-    <span class="color-control">
-      <input
-        class="color-picker"
-        type="color"
-        value={value}
-        aria-label={label}
-        onInput={(event) => {
-          const nextValue = event.currentTarget.value;
-          setValue(nextValue);
-          document.documentElement.style.setProperty(property, nextValue);
-        }}
-      />
-      <span class="hex-value">{value}</span>
-    </span>
-  );
-}
-
-export function LeftDrawer({ isOpen, onClose, onNewNote, notes, activeSlug, search, onSearchChange, onSelectNote }: LeftDrawerProps) {
+export function LeftDrawer({
+  isOpen,
+  onClose,
+  onNewNote,
+  notes,
+  activeSlug,
+  search,
+  onSearchChange,
+  onSelectNote,
+  preferences,
+  preferencesStorageWarning,
+  onPreferencesChange,
+  onResetColors,
+  dataNoticeDismissed,
+  onDismissDataNotice,
+  canExport,
+  canDelete,
+  onExport,
+  onDelete,
+}: LeftDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -81,11 +84,6 @@ export function LeftDrawer({ isOpen, onClose, onNewNote, notes, activeSlug, sear
     document.addEventListener("keydown", keepFocusInside);
     return () => document.removeEventListener("keydown", keepFocusInside);
   }, [isOpen, onClose]);
-
-  const setCssProperty = (property: string, value: string) => {
-    document.documentElement.style.setProperty(property, value);
-    window.dispatchEvent(new Event("editor-appearance-change"));
-  };
 
   return (
     <>
@@ -125,75 +123,24 @@ export function LeftDrawer({ isOpen, onClose, onNewNote, notes, activeSlug, sear
             onSelect={onSelectNote}
           />
 
-          <section class="settings-card" aria-labelledby="appearance-title">
-            <h2 class="card-title" id="appearance-title">Appearance</h2>
-            <label class="setting-row">
-              <span class="setting-label">Background</span>
-              <ColorControl label="Kolor tła" property="--editor-bg" initialValue="#233d4d" />
-            </label>
-            <label class="setting-row">
-              <span class="setting-label">Font Color</span>
-              <ColorControl label="Kolor tekstu" property="--editor-text" initialValue="#fe7f2d" />
-            </label>
-          </section>
-
-          <section class="settings-card" aria-labelledby="typography-title">
-            <h2 class="card-title" id="typography-title">Typography</h2>
-            <label class="setting-row">
-              <span class="setting-label">Font</span>
-              <select
-                class="select"
-                defaultValue="Courier New"
-                onChange={(event) => setCssProperty("--editor-font-family", `"${event.currentTarget.value}", monospace`)}
-              >
-                <option>Courier New</option>
-                <option>Consolas</option>
-                <option>Georgia</option>
-                <option>Arial</option>
-              </select>
-            </label>
-            <label class="setting-row">
-              <span class="setting-label">Font Size</span>
-              <select
-                class="select"
-                defaultValue="13"
-                onChange={(event) => setCssProperty("--editor-font-size", `${event.currentTarget.value}pt`)}
-              >
-                {[11, 12, 13, 14, 16, 18].map((size) => <option value={size}>{size}pt</option>)}
-              </select>
-            </label>
-            <label class="setting-row">
-              <span class="setting-label">Line Height</span>
-              <input
-                class="number-input"
-                type="number"
-                min="1.2"
-                max="2.4"
-                step="0.1"
-                defaultValue="1.8"
-                onInput={(event) => setCssProperty("--editor-line-height", event.currentTarget.value)}
-              />
-            </label>
-            <label class="setting-row">
-              <span class="setting-label">Width (px)</span>
-              <input
-                class="number-input"
-                type="number"
-                min="480"
-                max="1200"
-                step="10"
-                defaultValue="920"
-                onInput={(event) => setCssProperty("--editor-width", `${event.currentTarget.value}px`)}
-              />
-            </label>
-          </section>
+          <AppearanceSettings
+            preferences={preferences}
+            storageWarning={preferencesStorageWarning}
+            onChange={onPreferencesChange}
+            onResetColors={onResetColors}
+          />
 
           <div class="drawer-actions">
-            <button class="secondary-action" type="button" disabled>Eksportuj .txt</button>
-            <button class="danger-action" type="button" disabled>Usuń</button>
+            <button class="secondary-action" type="button" disabled={!canExport} onClick={onExport}>Eksportuj .txt</button>
+            <button class="danger-action" type="button" disabled={!canDelete} onClick={onDelete}>Usuń</button>
           </div>
 
-          <p class="local-note">Notatki pozostają wyłącznie w tej przeglądarce.</p>
+          {!dataNoticeDismissed && (
+            <aside class="local-note-box" role="status">
+              <p>Notatki i ustawienia pozostają wyłącznie w tej przeglądarce.</p>
+              <button type="button" onClick={onDismissDataNotice}>Rozumiem</button>
+            </aside>
+          )}
         </div>
       </aside>
     </>
