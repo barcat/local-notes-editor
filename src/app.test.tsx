@@ -77,6 +77,22 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Starsza notatka"));
   });
 
+  it("renames with the next available slug when the title conflicts", async () => {
+    const repository = createNoteRepository(`app-rename-test-${crypto.randomUUID()}`);
+    await saveNote(createNote("Pierwsza", "pierwsza", 10), repository, 10);
+    await saveNote(createNote("Druga", "druga", 20), repository, 20);
+    render(<App repository={repository} autoSaveDelay={0} />);
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Druga"));
+    fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Pierwsza" } });
+
+    await waitFor(async () => {
+      expect(await repository.getBySlug("pierwsza-2")).toBeDefined();
+    });
+    expect(window.location.pathname).toBe("/notatki/pierwsza-2");
+    expect((await repository.listMostRecent()).filter((note) => note.title === "Pierwsza")).toHaveLength(2);
+  });
+
   it("cancels deletion or removes the current note and opens an empty editor", async () => {
     const repository = createNoteRepository(`app-delete-test-${crypto.randomUUID()}`);
     await saveNote(createNote("Do usunięcia", "treść", 10), repository, 10);
@@ -87,6 +103,12 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Usuń" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Usuń" }));
     expect(screen.getByRole("dialog", { name: "Usunąć notatkę?" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Anuluj" })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Usunąć notatkę?" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Usuń" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Usuń" }));
     fireEvent.click(screen.getByRole("button", { name: "Anuluj" }));
     expect(await repository.getBySlug("do-usuniecia")).toBeDefined();
 
