@@ -21,6 +21,12 @@ export function normalizeNoteTitle(title: string): string {
   return title.trim() || DEFAULT_NOTE_TITLE;
 }
 
+export function formatNoteTimestampTitle(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function createNote(title = "", content = "", now = Date.now()): Note {
   return {
     id: createNoteId(),
@@ -29,6 +35,11 @@ export function createNote(title = "", content = "", now = Date.now()): Note {
     content,
     updatedAt: now,
   };
+}
+
+export function createNewNote(now = Date.now()): Note {
+  const title = formatNoteTimestampTitle(now);
+  return createNote(title, "", now);
 }
 
 export async function getAvailableSlug(
@@ -69,10 +80,40 @@ export async function saveNote(
   throw new Error("Nie udało się zapisać notatki z unikalnym slugiem.");
 }
 
+/** Persists an existing note without changing its committed title or slug. */
+export async function saveNoteContent(
+  note: Note,
+  repository: NoteRepository,
+  now = Date.now(),
+): Promise<Note> {
+  const savedNote = { ...note, title: normalizeNoteTitle(note.title), updatedAt: now };
+  await repository.save(savedNote);
+  return savedNote;
+}
+
+export async function saveNewNote(
+  note: Note,
+  repository: NoteRepository,
+  now = Date.now(),
+): Promise<Note> {
+  return saveNote(note, repository, now);
+}
+
+export async function renameNote(
+  note: Note,
+  repository: NoteRepository,
+  now = Date.now(),
+): Promise<Note> {
+  return saveNote(note, repository, now);
+}
+
+export type NoteSaveFunction = (note: Note, repository: NoteRepository, now?: number) => Promise<Note>;
+
 export interface SaveCoordinatorOptions {
   repository: NoteRepository;
   delay?: number;
   now?: () => number;
+  save?: NoteSaveFunction;
   onSaved?: (note: Note, isLatest: boolean) => void;
   onError?: (error: unknown, note: Note, isLatest: boolean) => void;
 }
@@ -80,6 +121,7 @@ export interface SaveCoordinatorOptions {
 export interface SaveCoordinator {
   schedule(note: Note): number;
   flush(): Promise<Note | undefined>;
+  saveNow(note: Note, save?: NoteSaveFunction): Promise<Note>;
   cancel(): void;
   cancelAndWait(): Promise<void>;
   dispose(): void;
@@ -95,6 +137,7 @@ export function createSaveCoordinator({
   repository,
   delay = AUTO_SAVE_DELAY,
   now = Date.now,
+  save = saveNoteContent,
   onSaved,
   onError,
 }: SaveCoordinatorOptions): SaveCoordinator {
@@ -113,7 +156,7 @@ export function createSaveCoordinator({
     pending = undefined;
     const operation = (async () => {
       try {
-        const saved = await saveNote(current.note, repository, now());
+        const saved = await save(current.note, repository, now());
         onSaved?.(saved, current.version === version);
         return saved;
       } catch (error) {
@@ -134,6 +177,35 @@ export function createSaveCoordinator({
       },
     );
     return operation;
+  };
+
+  const saveNow = async (note: Note, saveOperation: NoteSaveFunction = save): Promise<Note> => {
+    if (disposed) throw new Error("Koordynator zapisu został zamknięty.");
+
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    pendingIsReady = true;
+
+    if (active) {
+      try {
+        await active;
+      } catch {
+        // The immediate operation is still allowed to retry after a failed autosave.
+      }
+    }
+    if (pending) await start();
+
+    version += 1;
+    const operation = (async () => saveOperation(note, repository, now()))();
+    active = operation;
+    try {
+      return await operation;
+    } finally {
+      if (active === operation) active = undefined;
+      if (pending && pendingIsReady) void start().catch(() => undefined);
+    }
   };
 
   const schedule = (note: Note): number => {
@@ -190,7 +262,7 @@ export function createSaveCoordinator({
     disposed = true;
   };
 
-  return { schedule, flush, cancel, cancelAndWait, dispose };
+  return { schedule, flush, saveNow, cancel, cancelAndWait, dispose };
 }
 
 export function chooseAvailableSlug(baseSlug: string, occupiedSlugs: Iterable<string>): string {
