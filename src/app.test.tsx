@@ -3,10 +3,30 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./app";
 import { createNote, saveNote } from "./noteOperations";
 import { createNoteRepository } from "./noteRepository";
+import type { Note, NoteRepository } from "./types";
+
+function deferred<T>() {
+  let resolve: (value: T) => void;
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve: resolve! };
+}
+
+function repositoryFromNotes(notes: Note[]): NoteRepository {
+  const stored = new Map(notes.map((note) => [note.id, note]));
+  return {
+    getBySlug: async (slug) => [...stored.values()].find((note) => note.slug === slug),
+    getMostRecent: async () => [...stored.values()].sort((left, right) => right.updatedAt - left.updatedAt)[0],
+    listMostRecent: async () => [...stored.values()].sort((left, right) => right.updatedAt - left.updatedAt),
+    save: async (note) => { stored.set(note.id, note); },
+    delete: async (id) => { stored.delete(id); },
+    isSlugAvailable: async (slug, exceptId) => [...stored.values()].every((note) => note.slug !== slug || note.id === exceptId),
+  };
+}
 
 describe("App shell", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/");
+    document.title = "Lokalne notatki";
   });
 
   it("opens the drawer, moves focus inside and closes it with Escape", async () => {
@@ -163,5 +183,72 @@ describe("App shell", () => {
     await waitFor(async () => expect(await repository.getBySlug("do-usuniecia")).toBeUndefined());
     await waitFor(() => expect(window.location.pathname).toBe("/"));
     expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("");
+  });
+
+  it("uses the saved title in the browser tab, not an editable title input", async () => {
+    const repository = createNoteRepository(`app-tab-title-test-${crypto.randomUUID()}`);
+    const original = await saveNote(createNote("Zapisany tytuł", "treść", 10), repository, 10);
+    window.history.replaceState({}, "", `/notatki/${original.slug}`);
+    render(<App repository={repository} />);
+
+    const title = screen.getByPlaceholderText("Bez tytułu");
+    await waitFor(() => expect(document.title).toBe("Zapisany tytuł"));
+
+    fireEvent.input(title, { target: { value: "Tylko w polu" } });
+    expect(document.title).toBe("Zapisany tytuł");
+
+    fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
+    await waitFor(async () => expect((await repository.getBySlug("tylko-w-polu"))?.title).toBe("Tylko w polu"));
+    await waitFor(() => expect(document.title).toBe("Tylko w polu"));
+  });
+
+  it("uses the fallback while a switched note is hydrating", async () => {
+    const older = createNote("Starsza notatka", "starsza", 10);
+    const newer = createNote("Nowsza notatka", "nowsza", 20);
+    const olderLookup = deferred<Note | undefined>();
+    let olderLookups = 0;
+    const repository = repositoryFromNotes([older, newer]);
+    repository.getBySlug = async (slug) => {
+      if (slug !== older.slug) return newer;
+      olderLookups += 1;
+      return olderLookups === 1 ? olderLookup.promise : older;
+    };
+
+    render(<App repository={repository} />);
+    await waitFor(() => expect(document.title).toBe("Nowsza notatka"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Starsza notatka" }));
+    await waitFor(() => expect(document.title).toBe("Lokalne notatki"));
+
+    olderLookup.resolve(older);
+    await waitFor(() => expect(document.title).toBe("Starsza notatka"));
+  });
+
+  it("uses a new note's generated default title in the browser tab", async () => {
+    const repository = createNoteRepository(`app-new-tab-title-test-${crypto.randomUUID()}`);
+    render(<App repository={repository} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Nowa notatka" }));
+
+    await waitFor(() => expect(document.title).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/));
+  });
+
+  it("falls back to the application title when a hydrated note title is invalid", async () => {
+    const invalidNote: Note = {
+      id: "invalid-title",
+      title: "",
+      slug: "invalid-title",
+      content: "treść",
+      updatedAt: 10,
+    };
+    const repository = repositoryFromNotes([invalidNote]);
+    window.history.replaceState({}, "", `/notatki/${invalidNote.slug}`);
+    document.title = "Poprzednia notatka";
+    render(<App repository={repository} />);
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue(""));
+    await waitFor(() => expect(document.title).toBe("Lokalne notatki"));
   });
 });
