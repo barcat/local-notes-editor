@@ -1,3 +1,37 @@
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("./assets/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("./assets/fonts/IBMPlexMono-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Commit Mono";
+  src: url("./assets/fonts/CommitMono-400-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-variation-settings: "wght" 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Commit Mono";
+  src: url("./assets/fonts/CommitMono-700-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-variation-settings: "wght" 700;
+  font-display: swap;
+}
+
 :root {
   --editor-bg: #233d4d;
   --editor-text: #fe7f2d;

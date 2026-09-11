@@ -72,7 +72,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: `${basePath}index.html`,
-          globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest}"],
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff2}"],
         },
       }),
     ],
