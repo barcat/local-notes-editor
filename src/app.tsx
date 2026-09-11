@@ -79,6 +79,11 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
   titleInputRef.current = titleInput;
 
   useEffect(() => {
+    const title = typeof draft.title === "string" && draft.title.trim() ? draft.title : "Lokalne notatki";
+    document.title = isHydrated ? title : "Lokalne notatki";
+  }, [draft.title, isHydrated]);
+
+  useEffect(() => {
     applyPreferences(preferences);
   }, [preferences]);
 
@@ -148,6 +153,11 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
 
   useEffect(() => {
     if (route.kind !== "editor") {
+      setIsHydrated(true);
+      return;
+    }
+
+    if (route.slug && draftRef.current.id && draftRef.current.slug === route.slug && !hasUserEditedRef.current) {
       setIsHydrated(true);
       return;
     }
@@ -320,6 +330,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
   const selectNote = useCallback(async (slug: string) => {
     const navigationId = ++navigationIdRef.current;
     isNavigatingRef.current = true;
+    setIsHydrated(false);
     try {
       await saveCoordinator.flush();
       await repository.getBySlug(slug);
@@ -341,6 +352,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
       const nextRoute = parseRoute();
       const navigationId = ++navigationIdRef.current;
       isNavigatingRef.current = true;
+      setIsHydrated(false);
       void saveCoordinator.flush().then(() => {
         if (navigationId !== navigationIdRef.current) return;
         if (nextRoute.kind === "not-found") {
@@ -367,6 +379,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
     replaceEditorPath();
     acceptedPathRef.current = buildEditorPath();
     hasUserEditedRef.current = false;
+    setIsHydrated(false);
     setRoute({ kind: "editor" });
   }, []);
 
@@ -384,6 +397,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
     if (!persistedNoteId) return;
     const navigationId = ++navigationIdRef.current;
     isNavigatingRef.current = true;
+    setIsHydrated(false);
     try {
       await saveCoordinator.cancelAndWait();
       if (navigationId !== navigationIdRef.current) return;
