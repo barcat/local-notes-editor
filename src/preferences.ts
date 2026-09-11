@@ -2,7 +2,7 @@ import type { EditorFontFamily, EditorPreferences } from "./types";
 
 export const PREFERENCES_STORAGE_KEY = "local-notes:preferences:v1";
 export const DATA_NOTICE_STORAGE_KEY = "local-notes:data-notice-dismissed:v1";
-export const EDITOR_FONT_FAMILIES: EditorFontFamily[] = ["Courier New", "Consolas", "Georgia", "Arial"];
+export const EDITOR_FONT_FAMILIES: EditorFontFamily[] = ["Courier New", "Consolas", "IBM Plex Mono", "Commit Mono", "Georgia", "Arial"];
 
 export const DEFAULT_PREFERENCES: EditorPreferences = {
   backgroundColor: "#233d4d",
@@ -130,10 +130,17 @@ export function savePreferences(preferences: EditorPreferences, storage: Storage
 }
 
 export function applyPreferences(preferences: EditorPreferences, root: HTMLElement = document.documentElement): void {
-  const fontFallback = preferences.fontFamily === "Georgia" ? "serif" : preferences.fontFamily === "Arial" ? "sans-serif" : "monospace";
+  const fontStacks: Record<EditorFontFamily, string> = {
+    "Courier New": '"Courier New", "Courier", monospace',
+    Consolas: 'Consolas, "Liberation Mono", monospace',
+    "IBM Plex Mono": '"IBM Plex Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace',
+    "Commit Mono": '"Commit Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace',
+    Georgia: 'Georgia, "Times New Roman", serif',
+    Arial: 'Arial, Helvetica, sans-serif',
+  };
   root.style.setProperty("--editor-bg", preferences.backgroundColor);
   root.style.setProperty("--editor-text", preferences.textColor);
-  root.style.setProperty("--editor-font-family", `"${preferences.fontFamily}", ${fontFallback}`);
+  root.style.setProperty("--editor-font-family", fontStacks[preferences.fontFamily]);
   root.style.setProperty("--editor-font-size", `${preferences.fontSizePt}pt`);
   root.style.setProperty("--editor-line-height", String(preferences.lineHeight));
   root.style.setProperty("--editor-width", `${preferences.editorWidthPx}px`);

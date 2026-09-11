@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PREFERENCES,
+  applyPreferences,
   dismissDataNotice,
   hasSufficientContrast,
   isDataNoticeDismissed,
   loadPreferences,
   parsePreferences,
+  isEditorFontFamily,
   sanitizePreferencesPatch,
   savePreferences,
 } from "./preferences";
@@ -44,6 +46,16 @@ describe("editor preferences", () => {
     expect(parsed.correctedInvalidData).toBe(false);
   });
 
+  it("accepts the bundled monospace fonts without correcting stored preferences", () => {
+    for (const fontFamily of ["IBM Plex Mono", "Commit Mono"] as const) {
+      expect(isEditorFontFamily(fontFamily)).toBe(true);
+      const parsed = parsePreferences(JSON.stringify({ ...DEFAULT_PREFERENCES, fontFamily }));
+      expect(parsed.preferences.fontFamily).toBe(fontFamily);
+      expect(parsed.correctedInvalidData).toBe(false);
+    }
+    expect(isEditorFontFamily("Comic Sans")).toBe(false);
+  });
+
   it("replaces invalid fields independently with defaults", () => {
     const parsed = parsePreferences(JSON.stringify({
       backgroundColor: "red",
@@ -70,6 +82,24 @@ describe("editor preferences", () => {
     expect(isDataNoticeDismissed(storage)).toBe(false);
     expect(dismissDataNotice(storage).ok).toBe(true);
     expect(isDataNoticeDismissed(storage)).toBe(true);
+  });
+
+  it("saves and restores each bundled font", () => {
+    for (const fontFamily of ["IBM Plex Mono", "Commit Mono"] as const) {
+      const storage = memoryStorage();
+      const preferences = { ...DEFAULT_PREFERENCES, fontFamily };
+      expect(savePreferences(preferences, storage).ok).toBe(true);
+      expect(loadPreferences(storage).preferences.fontFamily).toBe(fontFamily);
+    }
+  });
+
+  it("applies explicit fallback stacks for bundled fonts", () => {
+    const root = document.createElement("div");
+    applyPreferences({ ...DEFAULT_PREFERENCES, fontFamily: "IBM Plex Mono" }, root);
+    expect(root.style.getPropertyValue("--editor-font-family")).toBe('"IBM Plex Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace');
+
+    applyPreferences({ ...DEFAULT_PREFERENCES, fontFamily: "Commit Mono" }, root);
+    expect(root.style.getPropertyValue("--editor-font-family")).toBe('"Commit Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace');
   });
 
   it("reports storage failures without blocking defaults", () => {
