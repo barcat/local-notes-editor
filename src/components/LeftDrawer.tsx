@@ -7,6 +7,7 @@ interface LeftDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onNewNote: () => void;
+  isCreatingNote?: boolean;
   notes: Note[];
   activeSlug?: string;
   search: string;
@@ -36,6 +37,7 @@ export function LeftDrawer({
   isOpen,
   onClose,
   onNewNote,
+  isCreatingNote = false,
   notes,
   activeSlug,
   search,
@@ -113,7 +115,7 @@ export function LeftDrawer({
             </button>
           </header>
 
-          <button class="primary-action" type="button" onClick={onNewNote}>+ Nowa notatka</button>
+          <button class="primary-action" type="button" disabled={isCreatingNote} onClick={onNewNote}>+ Nowa notatka</button>
 
           <NotesList
             notes={notes}

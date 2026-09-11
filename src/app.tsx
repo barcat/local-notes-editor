@@ -3,7 +3,15 @@ import { Editor } from "./components/Editor";
 import { DeleteNoteDialog } from "./components/DeleteNoteDialog";
 import { ErrorToast } from "./components/ErrorToast";
 import { LeftDrawer } from "./components/LeftDrawer";
-import { createNoteId, createSaveCoordinator, createTextExport } from "./noteOperations";
+import {
+  createNewNote,
+  createNoteId,
+  createSaveCoordinator,
+  createTextExport,
+  normalizeNoteTitle,
+  renameNote,
+  saveNewNote,
+} from "./noteOperations";
 import { noteRepository } from "./noteRepository";
 import {
   applyPreferences,
@@ -44,6 +52,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [route, setRoute] = useState<Route>(() => parseRoute());
   const [draft, setDraft] = useState<NoteDraft>({ title: "", content: "" });
+  const [titleInput, setTitleInput] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
   const [search, setSearch] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
@@ -51,6 +60,8 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [persistedNoteId, setPersistedNoteId] = useState<string | undefined>();
+  const [isTitleSaving, setIsTitleSaving] = useState(false);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [preferences, setPreferences] = useState<EditorPreferences>(() => initialPreferences ?? loadPreferences().preferences);
   const [preferencesStorageWarning, setPreferencesStorageWarning] = useState<string | null>(initialPreferencesError ?? null);
@@ -59,7 +70,13 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
   const acceptedPathRef = useRef(window.location.pathname);
   const navigationIdRef = useRef(0);
   const isNavigatingRef = useRef(false);
+  const isCreatingNoteRef = useRef(false);
+  const draftRef = useRef(draft);
+  const titleInputRef = useRef(titleInput);
   const preferencesRef = useRef(preferences);
+
+  draftRef.current = draft;
+  titleInputRef.current = titleInput;
 
   useEffect(() => {
     applyPreferences(preferences);
@@ -104,7 +121,9 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
       ...(autoSaveDelay === undefined ? {} : { delay: autoSaveDelay }),
       onSaved: (saved, isLatest) => {
         if (!isLatest) return;
-        setDraft({ id: saved.id, title: saved.title, content: saved.content, slug: saved.slug });
+        const nextDraft = { ...draftRef.current, id: saved.id, title: saved.title, content: saved.content, slug: saved.slug };
+        draftRef.current = nextDraft;
+        setDraft(nextDraft);
         setPersistedNoteId(saved.id);
         setIsDirty(false);
         setSaveError(null);
@@ -134,25 +153,30 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
     }
 
     let cancelled = false;
+    const hydrationNavigationId = navigationIdRef.current;
     const load = async () => {
       setIsHydrated(false);
       setLoadError(null);
       saveCoordinator.cancel();
       try {
         const note = route.slug ? await repository.getBySlug(route.slug) : await repository.getMostRecent();
-        if (cancelled) return;
+        if (cancelled || hydrationNavigationId !== navigationIdRef.current) return;
 
         if (!hasUserEditedRef.current) {
-          setDraft(note
+          const nextDraft = note
             ? { id: note.id, title: note.title, content: note.content, slug: note.slug }
-            : { title: route.slug ? readableTitleFromSlug(route.slug) : "", content: "", slug: route.slug });
+            : { title: route.slug ? readableTitleFromSlug(route.slug) : "", content: "", slug: route.slug };
+          draftRef.current = nextDraft;
+          setDraft(nextDraft);
+          titleInputRef.current = nextDraft.title;
+          setTitleInput(nextDraft.title);
           setPersistedNoteId(note?.id);
           setIsDirty(false);
           requestAnimationFrame(() => document.querySelector<HTMLInputElement | HTMLTextAreaElement>(note ? ".editor-content" : ".editor-title")?.focus());
         }
         setIsHydrated(true);
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled || hydrationNavigationId !== navigationIdRef.current) return;
         setLoadError(errorMessage(error, "Nie udało się odczytać lokalnej notatki."));
         setIsHydrated(true);
       }
@@ -186,37 +210,112 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
   }, [isDirty]);
 
-  const updateDraft = useCallback((field: "title" | "content", value: string) => {
+  const updateDraft = useCallback((value: string) => {
     hasUserEditedRef.current = true;
     setSaveError(null);
     setIsDirty(true);
-    setDraft((current) => ({ ...current, id: current.id ?? createNoteId(), [field]: value }));
+    const nextDraft = { ...draftRef.current, id: draftRef.current.id ?? createNoteId(), content: value };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
   }, []);
 
+  const updateTitleInput = useCallback((value: string) => {
+    hasUserEditedRef.current = true;
+    setSaveError(null);
+    titleInputRef.current = value;
+    setTitleInput(value);
+  }, []);
+
+  const confirmTitle = useCallback(async () => {
+    if (isTitleSaving || !draftRef.current.id) return;
+
+    const titleAtStart = titleInputRef.current;
+    const noteId = draftRef.current.id;
+    if (!noteId || titleAtStart === draftRef.current.title) return;
+
+    setIsTitleSaving(true);
+    setSaveError(null);
+    try {
+      await saveCoordinator.flush();
+      const draftAtRenameStart = draftRef.current;
+      const saved = await saveCoordinator.saveNow(
+        {
+          id: noteId,
+          title: normalizeNoteTitle(titleAtStart),
+          content: draftAtRenameStart.content,
+          slug: draftAtRenameStart.slug ?? "",
+          updatedAt: 0,
+        },
+        renameNote,
+      );
+
+      const latestDraft = draftRef.current;
+      const contentChangedDuringRename = latestDraft.content !== draftAtRenameStart.content;
+      saveCoordinator.cancel();
+      const nextDraft = { ...latestDraft, id: saved.id, title: saved.title, slug: saved.slug };
+      draftRef.current = nextDraft;
+      setDraft(nextDraft);
+      setPersistedNoteId(saved.id);
+      setIsDirty(contentChangedDuringRename);
+      if (titleInputRef.current === titleAtStart) {
+        titleInputRef.current = saved.title;
+        setTitleInput(saved.title);
+      }
+      if (!isNavigatingRef.current) {
+        replaceEditorPath(saved.slug);
+        acceptedPathRef.current = buildEditorPath(saved.slug);
+      }
+      if (contentChangedDuringRename) {
+        saveCoordinator.schedule({ ...nextDraft, updatedAt: 0 });
+      }
+      void refreshNotes().catch((error: unknown) => setLoadError(errorMessage(error, "Nie udało się odświeżyć listy notatek.")));
+    } catch (error) {
+      setSaveError(errorMessage(error, "Nie udało się zapisać tytułu notatki."));
+    } finally {
+      setIsTitleSaving(false);
+    }
+  }, [isTitleSaving, refreshNotes, saveCoordinator]);
+
   const startNewNote = useCallback(async () => {
+    if (isCreatingNoteRef.current) return;
+    isCreatingNoteRef.current = true;
+    setIsCreatingNote(true);
     const navigationId = ++navigationIdRef.current;
+    const hadUserEdited = hasUserEditedRef.current;
     isNavigatingRef.current = true;
+    hasUserEditedRef.current = true;
     try {
       await saveCoordinator.flush();
       if (navigationId !== navigationIdRef.current) return;
       saveCoordinator.cancel();
+      const saved = await saveNewNote(createNewNote(), repository);
+      if (navigationId !== navigationIdRef.current) return;
       hasUserEditedRef.current = false;
-      const nextRoute: Route = { kind: "editor" };
-      replaceEditorPath();
-      acceptedPathRef.current = buildEditorPath();
+      const nextRoute: Route = { kind: "editor", slug: saved.slug };
+      replaceEditorPath(saved.slug);
+      acceptedPathRef.current = buildEditorPath(saved.slug);
       setRoute(nextRoute);
-      setDraft({ title: "", content: "" });
-      setPersistedNoteId(undefined);
+      const nextDraft = { id: saved.id, title: saved.title, content: saved.content, slug: saved.slug };
+      draftRef.current = nextDraft;
+      setDraft(nextDraft);
+      titleInputRef.current = saved.title;
+      setTitleInput(saved.title);
+      setPersistedNoteId(saved.id);
       setIsDirty(false);
       setSaveError(null);
       closeDrawer();
+      void refreshNotes().catch((error: unknown) => setLoadError(errorMessage(error, "Nie udało się odświeżyć listy notatek.")));
       requestAnimationFrame(() => document.querySelector<HTMLInputElement>(".editor-title")?.focus());
     } catch (error) {
+      hasUserEditedRef.current = hadUserEdited;
+      setIsHydrated(true);
       setSaveError(errorMessage(error, "Nie udało się utrwalić bieżącej notatki."));
     } finally {
       if (navigationId === navigationIdRef.current) isNavigatingRef.current = false;
+      isCreatingNoteRef.current = false;
+      setIsCreatingNote(false);
     }
-  }, [closeDrawer, saveCoordinator]);
+  }, [closeDrawer, refreshNotes, repository, saveCoordinator]);
 
   const selectNote = useCallback(async (slug: string) => {
     const navigationId = ++navigationIdRef.current;
@@ -307,7 +406,11 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
       } else {
         replaceEditorPath();
         acceptedPathRef.current = buildEditorPath();
-        setDraft({ title: "", content: "" });
+        const nextDraft = { title: "", content: "" };
+        draftRef.current = nextDraft;
+        setDraft(nextDraft);
+        titleInputRef.current = "";
+        setTitleInput("");
         setRoute({ kind: "editor" });
       }
     } catch (error) {
@@ -348,10 +451,13 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
 
       <div {...(isDrawerOpen && { inert: true })}>
         <Editor
-          title={draft.title}
+          title={titleInput}
           content={draft.content}
-          onTitleChange={(value) => updateDraft("title", value)}
-          onContentChange={(value) => updateDraft("content", value)}
+          onTitleChange={updateTitleInput}
+          onTitleConfirm={() => { void confirmTitle(); }}
+          onContentChange={updateDraft}
+          showTitleSave={titleInput !== draft.title}
+          isTitleSaving={isTitleSaving}
         />
       </div>
 
@@ -359,6 +465,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
         isOpen={isDrawerOpen}
         onClose={closeDrawer}
         onNewNote={() => { void startNewNote(); }}
+        isCreatingNote={isCreatingNote}
         notes={notes}
         activeSlug={activeSlug}
         search={search}

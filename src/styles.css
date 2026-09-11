@@ -80,7 +80,23 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
   color: inherit;
   font-family: inherit;
 }
+.editor-title-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 30px; }
+.editor-title-label { min-width: 0; flex: 1; }
 .editor-title { margin-bottom: 30px; font-size: 1.25em; font-weight: 700; line-height: 1.45; }
+.editor-title-row .editor-title { margin-bottom: 0; }
+.title-save-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--editor-text) 34%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+.title-save-button svg { width: 20px; height: 20px; }
 .editor-content { min-height: calc(100vh - 230px); resize: none; overflow: hidden; line-height: inherit; }
 .editor-title::placeholder, .editor-content::placeholder { color: var(--editor-text-soft); opacity: 1; }
 .error-toast {

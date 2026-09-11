@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNote, createSaveCoordinator, createTextExport } from "./noteOperations";
+import { createNewNote, createNote, createSaveCoordinator, createTextExport, formatNoteTimestampTitle, saveNewNote } from "./noteOperations";
+import { createNoteRepository } from "./noteRepository";
 import type { NoteRepository } from "./types";
 
 function repositoryWithSave(save: NoteRepository["save"]): NoteRepository {
@@ -14,6 +15,30 @@ function repositoryWithSave(save: NoteRepository["save"]): NoteRepository {
 }
 
 describe("save coordinator", () => {
+  it("formats timestamp titles and creates distinct notes in the same minute", async () => {
+    const timestamp = new Date(2026, 8, 10, 9, 7, 42, 123).getTime();
+    expect(formatNoteTimestampTitle(timestamp)).toBe("2026-09-10 09:07");
+
+    const repository = createNoteRepository(`note-factory-test-${crypto.randomUUID()}`);
+    const first = await saveNewNote(createNewNote(timestamp), repository, timestamp);
+    const second = await saveNewNote(createNewNote(timestamp + 10_000), repository, timestamp + 10_000);
+
+    expect(first.id).not.toBe(second.id);
+    expect(first.title).toBe(second.title);
+    expect(first.slug).not.toBe(second.slug);
+    expect(first.content).toBe("");
+  });
+
+  it("preserves the committed slug during content autosave", async () => {
+    const save = vi.fn(async () => undefined);
+    const coordinator = createSaveCoordinator({ repository: repositoryWithSave(save), delay: 0 });
+    coordinator.schedule({ id: "note-1", title: "Stary tytuł", slug: "stary-tytul", content: "Treść", updatedAt: 1 });
+    await coordinator.flush();
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ title: "Stary tytuł", slug: "stary-tytul" }));
+    coordinator.dispose();
+  });
+
   it("waits 400 ms before saving and coalesces rapid edits", async () => {
     vi.useFakeTimers();
     const save = vi.fn(async () => undefined);

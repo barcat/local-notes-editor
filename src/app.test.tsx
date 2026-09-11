@@ -26,25 +26,28 @@ describe("App shell", () => {
     expect(drawer).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("clears the current draft when a new note is selected", async () => {
-    render(<App />);
+  it("creates a persisted timestamped note without overwriting the current note", async () => {
+    const repository = createNoteRepository(`app-new-note-test-${crypto.randomUUID()}`);
+    const first = await saveNote(createNote("Pierwsza", "Pierwsza treść", 10), repository, 10);
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+
     const title = screen.getByPlaceholderText("Bez tytułu");
     const content = screen.getByPlaceholderText("Zacznij pisać…");
 
-    fireEvent.input(title, { target: { value: "Robocza" } });
-    fireEvent.input(content, { target: { value: "Treść" } });
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
     fireEvent.click(screen.getByRole("button", { name: "+ Nowa notatka" }));
 
-    await waitFor(() => expect(title).toHaveValue(""));
+    await waitFor(() => expect((title as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/));
     expect(content).toHaveValue("");
+    expect(window.location.pathname).toMatch(/^\/notatki\/\d{4}-\d{2}-\d{2}-\d{2}-\d{2}$/);
+    expect(await repository.getBySlug(first.slug)).toEqual(first);
   });
 
   it("autosaves a draft and restores it when the app is mounted again", async () => {
     const repository = createNoteRepository(`app-test-${crypto.randomUUID()}`);
     const firstRender = render(<App repository={repository} autoSaveDelay={0} />);
 
-    fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Trwała notatka" } });
     fireEvent.input(screen.getByPlaceholderText("Zacznij pisać…"), { target: { value: "HTML <b>i Markdown **bez interpretacji**" } });
     await waitFor(async () => {
       const saved = await repository.getMostRecent();
@@ -53,7 +56,7 @@ describe("App shell", () => {
 
     firstRender.unmount();
     render(<App repository={repository} />);
-    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Trwała notatka"));
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Bez tytułu"));
     expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue("HTML <b>i Markdown **bez interpretacji**");
   });
 
@@ -77,7 +80,7 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Starsza notatka"));
   });
 
-  it("renames with the next available slug when the title conflicts", async () => {
+  it("renames with the next available slug when the title is confirmed", async () => {
     const repository = createNoteRepository(`app-rename-test-${crypto.randomUUID()}`);
     await saveNote(createNote("Pierwsza", "pierwsza", 10), repository, 10);
     await saveNote(createNote("Druga", "druga", 20), repository, 20);
@@ -85,12 +88,53 @@ describe("App shell", () => {
 
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Druga"));
     fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Pierwsza" } });
+    expect(screen.getByRole("button", { name: "Zapisz tytuł" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
 
     await waitFor(async () => {
       expect(await repository.getBySlug("pierwsza-2")).toBeDefined();
     });
     expect(window.location.pathname).toBe("/notatki/pierwsza-2");
     expect((await repository.listMostRecent()).filter((note) => note.title === "Pierwsza")).toHaveLength(2);
+  });
+
+  it("keeps an unconfirmed title out of content autosaves", async () => {
+    const repository = createNoteRepository(`app-pending-title-test-${crypto.randomUUID()}`);
+    const original = await saveNote(createNote("Oryginalny tytuł", "stara treść", 10), repository, 10);
+    window.history.replaceState({}, "", `/notatki/${original.slug}`);
+    render(<App repository={repository} autoSaveDelay={0} />);
+
+    const title = screen.getByPlaceholderText("Bez tytułu");
+    const content = screen.getByPlaceholderText("Zacznij pisać…");
+    await waitFor(() => expect(title).toHaveValue("Oryginalny tytuł"));
+    fireEvent.input(title, { target: { value: "Nowy tytuł" } });
+    fireEvent.input(content, { target: { value: "nowa treść" } });
+
+    await waitFor(async () => {
+      expect(await repository.getBySlug(original.slug)).toEqual({ ...original, content: "nowa treść", updatedAt: expect.any(Number) });
+    });
+    expect(await repository.getBySlug("nowy-tytul")).toBeUndefined();
+    expect(window.location.pathname).toBe(`/notatki/${original.slug}`);
+    expect(screen.getByRole("button", { name: "Zapisz tytuł" })).toBeEnabled();
+  });
+
+  it("confirms a normalized title and keeps the same note id", async () => {
+    const repository = createNoteRepository(`app-confirm-title-test-${crypto.randomUUID()}`);
+    const original = await saveNote(createNote("Stary tytuł", "treść", 10), repository, 10);
+    window.history.replaceState({}, "", `/notatki/${original.slug}`);
+    render(<App repository={repository} />);
+
+    const title = screen.getByPlaceholderText("Bez tytułu");
+    await waitFor(() => expect(title).toHaveValue("Stary tytuł"));
+    fireEvent.input(title, { target: { value: "  Nowy tytuł  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
+
+    await waitFor(async () => expect(await repository.getBySlug("nowy-tytul")).toBeDefined());
+    const saved = await repository.getBySlug("nowy-tytul");
+    expect(saved?.id).toBe(original.id);
+    expect(saved?.title).toBe("Nowy tytuł");
+    expect(window.location.pathname).toBe("/notatki/nowy-tytul");
+    expect(screen.queryByRole("button", { name: "Zapisz tytuł" })).toBeNull();
   });
 
   it("cancels deletion or removes the current note and opens an empty editor", async () => {
