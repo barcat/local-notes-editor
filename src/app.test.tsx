@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./app";
+import { PREFERENCES_STORAGE_KEY } from "./preferences";
 import { createNote, saveNote } from "./noteOperations";
 import { createNoteRepository } from "./noteRepository";
 import type { Note, NoteRepository } from "./types";
@@ -44,6 +45,34 @@ describe("App shell", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(drawer).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("offers only IBM Plex fonts and restores the selected font on remount", async () => {
+    window.localStorage.removeItem(PREFERENCES_STORAGE_KEY);
+    const repository = repositoryFromNotes([]);
+    const firstRender = render(<App repository={repository} />);
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    const select = screen.getByRole("combobox", { name: "Font" });
+    expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "IBM Plex Mono", "IBM Plex Sans", "IBM Plex Serif",
+    ]);
+    expect(select).toHaveValue("IBM Plex Mono");
+
+    for (const [fontFamily, fallback] of [
+      ["IBM Plex Sans", "sans-serif"],
+      ["IBM Plex Serif", "serif"],
+      ["IBM Plex Mono", "monospace"],
+    ]) {
+      fireEvent.change(select, { target: { value: fontFamily } });
+      await waitFor(() => expect(document.documentElement.style.getPropertyValue("--editor-font-family")).toBe(`"${fontFamily}", ${fallback}`));
+      expect(JSON.parse(window.localStorage.getItem(PREFERENCES_STORAGE_KEY)!).fontFamily).toBe(fontFamily);
+    }
+    fireEvent.change(select, { target: { value: "IBM Plex Serif" } });
+    firstRender.unmount();
+    render(<App repository={repository} />);
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif");
+    window.localStorage.removeItem(PREFERENCES_STORAGE_KEY);
   });
 
   it("creates a persisted timestamped note without overwriting the current note", async () => {

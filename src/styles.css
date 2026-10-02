@@ -15,20 +15,34 @@
 }
 
 @font-face {
-  font-family: "Commit Mono";
-  src: url("./assets/fonts/CommitMono-400-Regular.woff2") format("woff2");
+  font-family: "IBM Plex Sans";
+  src: url("./assets/fonts/IBMPlexSans-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
-  font-variation-settings: "wght" 400;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Commit Mono";
-  src: url("./assets/fonts/CommitMono-700-Regular.woff2") format("woff2");
+  font-family: "IBM Plex Sans";
+  src: url("./assets/fonts/IBMPlexSans-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
-  font-variation-settings: "wght" 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Serif";
+  src: url("./assets/fonts/IBMPlexSerif-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Serif";
+  src: url("./assets/fonts/IBMPlexSerif-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
   font-display: swap;
 }
 
@@ -37,7 +51,7 @@
   --editor-text: #fe7f2d;
   --editor-text-soft: color-mix(in srgb, var(--editor-text) 58%, var(--editor-bg));
   --editor-selection: color-mix(in srgb, var(--editor-text) 28%, transparent);
-  --editor-font-family: "Courier New", monospace;
+  --editor-font-family: "IBM Plex Mono", monospace;
   --editor-font-size: 13pt;
   --editor-line-height: 1.8;
   --editor-width: 920px;
@@ -59,7 +73,7 @@ body {
   min-width: 1024px;
   background: var(--editor-bg);
   color: var(--editor-text);
-  font-family: var(--editor-font-family);
+  font-family: "IBM Plex Sans", sans-serif;
   font-size: var(--editor-font-size);
   line-height: var(--editor-line-height);
   transition: background-color 120ms ease, color 120ms ease;
@@ -102,7 +116,7 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
   background: var(--editor-bg);
   color: var(--editor-text);
 }
-.editor { width: min(var(--editor-width), calc(100vw - 128px)); margin: 0 auto; }
+.editor { font-family: var(--editor-font-family); width: min(var(--editor-width), calc(100vw - 128px)); margin: 0 auto; }
 .editor-title, .editor-content {
   display: block;
   width: 100%;
@@ -147,7 +161,7 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
   border-radius: 10px;
   background: #fff5f3;
   color: #64231f;
-  font: 14px/1.4 Arial, sans-serif;
+  font: 14px/1.4 "IBM Plex Sans", sans-serif;
   box-shadow: 0 12px 28px rgb(0 0 0 / 18%);
 }
 .error-toast button { padding: 0 4px; border: 0; background: transparent; color: inherit; font-size: 20px; line-height: 1; }
@@ -167,7 +181,7 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
 .route-error h1, .route-error p { margin: 0; }
 .route-error button { justify-self: center; padding: 10px 16px; border: 0; border-radius: 9px; background: var(--editor-text); color: var(--editor-bg); }
 .dialog-backdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(14 22 28 / 48%); }
-.delete-dialog { width: min(420px, 100%); padding: 22px; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--panel-bg); color: var(--panel-text); font: 14px/1.45 Arial, sans-serif; box-shadow: 0 20px 44px rgb(0 0 0 / 24%); }
+.delete-dialog { width: min(420px, 100%); padding: 22px; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--panel-bg); color: var(--panel-text); font: 14px/1.45 "IBM Plex Sans", sans-serif; box-shadow: 0 20px 44px rgb(0 0 0 / 24%); }
 .delete-dialog h2 { margin: 0 0 8px; font-size: 18px; }
 .delete-dialog p { margin: 0; color: var(--panel-muted); }
 .delete-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
@@ -194,7 +208,7 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
   border-right: 1px solid var(--panel-border);
   background: var(--panel-bg);
   color: var(--panel-text);
-  font-family: Arial, sans-serif;
+  font-family: "IBM Plex Sans", sans-serif;
   font-size: 14px;
   line-height: 1.45;
   transition: transform 180ms ease, visibility 0s linear 180ms;
@@ -263,7 +277,7 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
 .setting-row:first-of-type { border-top: 0; }
 .color-control { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .color-picker { width: 32px; height: 28px; padding: 2px; border: 1px solid #cfd1d7; border-radius: 7px; background: #fff; }
-.hex-input { width: 78px; height: 32px; padding: 0 6px; border: 1px solid #d7d8de; border-radius: 7px; background: #fff; color: #60677d; font-family: "Courier New", monospace; font-size: 12px; }
+.hex-input { width: 78px; height: 32px; padding: 0 6px; border: 1px solid #d7d8de; border-radius: 7px; background: #fff; color: #60677d; font-family: "IBM Plex Sans", sans-serif; font-size: 12px; }
 .select, .number-input { height: 40px; border: 1px solid #d7d8de; border-radius: 9px; background: #fff; color: #20243a; }
 .select { width: 144px; padding: 0 34px 0 12px; }
 .number-input { width: 82px; padding: 0 10px; text-align: center; }

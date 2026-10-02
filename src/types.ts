@@ -13,7 +13,7 @@ export interface NoteDraft {
   slug?: string;
 }
 
-export type EditorFontFamily = "Courier New" | "Consolas" | "Georgia" | "Arial" | "IBM Plex Mono" | "Commit Mono";
+export type EditorFontFamily = "IBM Plex Mono" | "IBM Plex Sans" | "IBM Plex Serif";
 
 export interface EditorPreferences {
   backgroundColor: string;

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PREFERENCES,
+  EDITOR_FONT_FAMILIES,
+  PREFERENCES_STORAGE_KEY,
   applyPreferences,
   dismissDataNotice,
   hasSufficientContrast,
@@ -29,7 +31,7 @@ describe("editor preferences", () => {
     const parsed = parsePreferences(JSON.stringify({
       backgroundColor: "#ABCDEF",
       textColor: "#123456",
-      fontFamily: "Arial",
+      fontFamily: "IBM Plex Sans",
       fontSizePt: 10,
       lineHeight: 2.4,
       editorWidthPx: 1200,
@@ -38,7 +40,7 @@ describe("editor preferences", () => {
     expect(parsed.preferences).toEqual({
       backgroundColor: "#abcdef",
       textColor: "#123456",
-      fontFamily: "Arial",
+      fontFamily: "IBM Plex Sans",
       fontSizePt: 10,
       lineHeight: 2.4,
       editorWidthPx: 1200,
@@ -46,8 +48,8 @@ describe("editor preferences", () => {
     expect(parsed.correctedInvalidData).toBe(false);
   });
 
-  it("accepts the bundled monospace fonts without correcting stored preferences", () => {
-    for (const fontFamily of ["IBM Plex Mono", "Commit Mono"] as const) {
+  it("accepts the three bundled IBM Plex fonts without correcting stored preferences", () => {
+    for (const fontFamily of ["IBM Plex Mono", "IBM Plex Sans", "IBM Plex Serif"] as const) {
       expect(isEditorFontFamily(fontFamily)).toBe(true);
       const parsed = parsePreferences(JSON.stringify({ ...DEFAULT_PREFERENCES, fontFamily }));
       expect(parsed.preferences.fontFamily).toBe(fontFamily);
@@ -55,6 +57,27 @@ describe("editor preferences", () => {
     }
     expect(isEditorFontFamily("Comic Sans")).toBe(false);
   });
+
+  it("offers only IBM Plex fonts and defaults to Mono", () => {
+    expect(EDITOR_FONT_FAMILIES).toEqual(["IBM Plex Mono", "IBM Plex Sans", "IBM Plex Serif"]);
+    expect(DEFAULT_PREFERENCES.fontFamily).toBe("IBM Plex Mono");
+  });
+
+  it.each(["Courier New", "Consolas", "Commit Mono", "Georgia", "Arial"])(
+    "corrects the retired %s font without resetting other preferences",
+    (fontFamily) => {
+      const stored = { ...DEFAULT_PREFERENCES, fontFamily, fontSizePt: 18, textColor: "#abcdef" };
+      const storage = memoryStorage({ [PREFERENCES_STORAGE_KEY]: JSON.stringify(stored) });
+      const loaded = loadPreferences(storage);
+      const expected = { ...stored, fontFamily: "IBM Plex Mono" };
+
+      expect(isEditorFontFamily(fontFamily)).toBe(false);
+      expect(loaded.preferences).toEqual(expected);
+      expect(loaded.correctedInvalidData).toBe(true);
+      expect(JSON.parse(storage.getItem(PREFERENCES_STORAGE_KEY)!)).toEqual(expected);
+      expect(loadPreferences(storage).correctedInvalidData).toBe(false);
+    },
+  );
 
   it("replaces invalid fields independently with defaults", () => {
     const parsed = parsePreferences(JSON.stringify({
@@ -85,7 +108,7 @@ describe("editor preferences", () => {
   });
 
   it("saves and restores each bundled font", () => {
-    for (const fontFamily of ["IBM Plex Mono", "Commit Mono"] as const) {
+    for (const fontFamily of ["IBM Plex Mono", "IBM Plex Sans", "IBM Plex Serif"] as const) {
       const storage = memoryStorage();
       const preferences = { ...DEFAULT_PREFERENCES, fontFamily };
       expect(savePreferences(preferences, storage).ok).toBe(true);
@@ -95,11 +118,14 @@ describe("editor preferences", () => {
 
   it("applies explicit fallback stacks for bundled fonts", () => {
     const root = document.createElement("div");
-    applyPreferences({ ...DEFAULT_PREFERENCES, fontFamily: "IBM Plex Mono" }, root);
-    expect(root.style.getPropertyValue("--editor-font-family")).toBe('"IBM Plex Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace');
-
-    applyPreferences({ ...DEFAULT_PREFERENCES, fontFamily: "Commit Mono" }, root);
-    expect(root.style.getPropertyValue("--editor-font-family")).toBe('"Commit Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace');
+    for (const [fontFamily, fallback] of [
+      ["IBM Plex Mono", "monospace"],
+      ["IBM Plex Sans", "sans-serif"],
+      ["IBM Plex Serif", "serif"],
+    ] as const) {
+      applyPreferences({ ...DEFAULT_PREFERENCES, fontFamily }, root);
+      expect(root.style.getPropertyValue("--editor-font-family")).toBe(`"${fontFamily}", ${fallback}`);
+    }
   });
 
   it("reports storage failures without blocking defaults", () => {
