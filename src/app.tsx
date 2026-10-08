@@ -12,6 +12,7 @@ import {
   renameNote,
   saveNewNote,
 } from "./noteOperations";
+import { DEFAULT_NOTE_ICON, isNoteIcon, normalizeNoteIcon, updateFavicon } from "./noteIcon";
 import { noteRepository } from "./noteRepository";
 import {
   applyPreferences,
@@ -78,8 +79,10 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
 
   useEffect(() => {
     const title = typeof draft.title === "string" && draft.title.trim() ? draft.title : "Lokalne notatki";
-    document.title = isHydrated ? title : "Lokalne notatki";
-  }, [draft.title, isHydrated]);
+    const isActive = isHydrated && route.kind === "editor" && !loadError && !isCreatingNote;
+    document.title = isActive ? title : "Lokalne notatki";
+    updateFavicon(isActive ? normalizeNoteIcon(draft.icon) : DEFAULT_NOTE_ICON);
+  }, [draft.title, draft.icon, isHydrated, route.kind, loadError, isCreatingNote]);
 
   useEffect(() => {
     applyPreferences(draft.preferences);
@@ -143,6 +146,19 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
     saveCoordinator.schedule({ ...next, slug: next.slug ?? "", updatedAt: 0 });
   }, [isHydrated, saveCoordinator]);
 
+  const updateNoteIcon = useCallback((icon: string) => {
+    if (!isHydrated || isNavigatingRef.current || isCreatingNoteRef.current || !draftRef.current.id || !isNoteIcon(icon)) return;
+    const next = { ...draftRef.current, icon: normalizeNoteIcon(icon) };
+    if (next.icon === draftRef.current.icon) return;
+    hasUserEditedRef.current = true;
+    draftRef.current = next;
+    setDraft(next);
+    setIsDirty(true);
+    setSaveError(null);
+    // Queue immediately so navigation can flush even before effects run.
+    saveCoordinator.schedule({ ...next, id: next.id!, slug: next.slug ?? "", updatedAt: 0 });
+  }, [isHydrated, saveCoordinator]);
+
   const resetColors = useCallback(() => {
     updatePreferences({
       backgroundColor: DEFAULT_PREFERENCES.backgroundColor,
@@ -180,7 +196,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
         if (!hasUserEditedRef.current) {
           const nextDraft = note
             ? {
-              id: note.id, title: note.title, content: note.content, slug: note.slug,
+              id: note.id, title: note.title, content: note.content, slug: note.slug, icon: normalizeNoteIcon(note.icon),
               preferences: normalizePreferences(
                 note.preferences,
                 note.preferences === undefined ? legacyPreferences : DEFAULT_PREFERENCES,
@@ -216,6 +232,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
       title: draft.title,
       slug: draft.slug ?? "",
       content: draft.content,
+      icon: normalizeNoteIcon(draft.icon),
       preferences: draft.preferences,
       updatedAt: 0,
     };
@@ -265,6 +282,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
           id: noteId,
           title: normalizeNoteTitle(titleAtStart),
           content: draftAtRenameStart.content,
+          icon: normalizeNoteIcon(draftAtRenameStart.icon),
           preferences: draftAtRenameStart.preferences,
           slug: draftAtRenameStart.slug ?? "",
           updatedAt: 0,
@@ -274,7 +292,8 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
 
       const latestDraft = draftRef.current;
       const draftChangedDuringRename = latestDraft.content !== draftAtRenameStart.content
-        || latestDraft.preferences !== draftAtRenameStart.preferences;
+        || latestDraft.preferences !== draftAtRenameStart.preferences
+        || latestDraft.icon !== draftAtRenameStart.icon;
       saveCoordinator.cancel();
       const nextDraft = { ...latestDraft, id: saved.id, title: saved.title, slug: saved.slug };
       draftRef.current = nextDraft;
@@ -319,7 +338,7 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
       replaceEditorPath(saved.slug);
       acceptedPathRef.current = buildEditorPath(saved.slug);
       setRoute(nextRoute);
-      const nextDraft = { id: saved.id, title: saved.title, content: saved.content, slug: saved.slug, preferences: normalizePreferences(saved.preferences).preferences };
+      const nextDraft = { id: saved.id, title: saved.title, content: saved.content, slug: saved.slug, icon: normalizeNoteIcon(saved.icon), preferences: normalizePreferences(saved.preferences).preferences };
       draftRef.current = nextDraft;
       setDraft(nextDraft);
       titleInputRef.current = saved.title;
@@ -482,6 +501,10 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
 
       <div {...(isDrawerOpen && { inert: true })}>
         <Editor
+          icon={isHydrated && !isCreatingNote && !loadError ? normalizeNoteIcon(draft.icon) : DEFAULT_NOTE_ICON}
+          onIconChange={updateNoteIcon}
+          iconDisabled={!isHydrated || !draft.id || isCreatingNote || Boolean(loadError)}
+          noteId={draft.id}
           title={titleInput}
           content={draft.content}
           onTitleChange={updateTitleInput}

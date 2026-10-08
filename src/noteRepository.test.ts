@@ -40,11 +40,13 @@ describe("IndexedDB note repository", () => {
   it("round-trips per-note appearance and still reads legacy records", async () => {
     const repository = repositoryForTest();
     const note = createNote("Styled", "text", 10);
+    note.icon = "🇵🇱";
     note.preferences!.fontFamily = "IBM Plex Serif";
     await repository.save(note);
     expect(await repository.getBySlug(note.slug)).toEqual(note);
     const legacy = createNote("Legacy", "", 20);
     delete legacy.preferences;
+    delete legacy.icon;
     await repository.save(legacy);
     expect(await repository.getBySlug(legacy.slug)).toEqual(legacy);
   });

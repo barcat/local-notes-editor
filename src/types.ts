@@ -3,6 +3,7 @@ export interface Note {
   title: string;
   slug: string;
   content: string;
+  icon?: string;
   updatedAt: number;
   preferences?: EditorPreferences;
 }
@@ -12,6 +13,7 @@ export interface NoteDraft {
   id?: string;
   title: string;
   content: string;
+  icon?: string;
   slug?: string;
 }
 

@@ -1,10 +1,20 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
+import { createEmojiFavicon, DEFAULT_NOTE_ICON } from "./noteIcon";
 import { App } from "./app";
 import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from "./preferences";
 import { createNote, saveNote } from "./noteOperations";
 import { createNoteRepository } from "./noteRepository";
 import type { Note, NoteRepository } from "./types";
+
+function favicon() {
+  return document.head.querySelector('link[rel="icon"]')?.getAttribute("href");
+}
+
+function chooseIcon(icon: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Zmień ikonę notatki" }));
+  fireEvent.click(screen.getByRole("button", { name: `Wybierz ikonę ${icon}` }));
+}
 
 function deferred<T>() {
   let resolve: (value: T) => void;
@@ -192,7 +202,7 @@ describe("App shell", () => {
 
   it("cancels deletion or removes the current note and opens an empty editor", async () => {
     const repository = createNoteRepository(`app-delete-test-${crypto.randomUUID()}`);
-    await saveNote(createNote("Do usunięcia", "treść", 10), repository, 10);
+    await saveNote({ ...createNote("Do usunięcia", "treść", 10), icon: "💡" }, repository, 10);
     render(<App repository={repository} />);
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Do usunięcia"));
 
@@ -216,6 +226,8 @@ describe("App shell", () => {
     await waitFor(async () => expect(await repository.getBySlug("do-usuniecia")).toBeUndefined());
     await waitFor(() => expect(window.location.pathname).toBe("/"));
     expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("");
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon(DEFAULT_NOTE_ICON)));
+    expect(screen.getByRole("button", { name: "Zmień ikonę notatki" })).toBeDisabled();
   });
 
   it("uses the saved title in the browser tab, not an editable title input", async () => {
@@ -237,7 +249,7 @@ describe("App shell", () => {
 
   it("uses the fallback while a switched note is hydrating", async () => {
     const older = createNote("Starsza notatka", "starsza", 10);
-    const newer = createNote("Nowsza notatka", "nowsza", 20);
+    const newer = { ...createNote("Nowsza notatka", "nowsza", 20), icon: "💡" };
     const olderLookup = deferred<Note | undefined>();
     let olderLookups = 0;
     const repository = repositoryFromNotes([older, newer]);
@@ -249,10 +261,12 @@ describe("App shell", () => {
 
     render(<App repository={repository} />);
     await waitFor(() => expect(document.title).toBe("Nowsza notatka"));
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("💡")));
 
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
     fireEvent.click(screen.getByRole("button", { name: "Starsza notatka" }));
     await waitFor(() => expect(document.title).toBe("Lokalne notatki"));
+    expect(favicon()).toBe(createEmojiFavicon(DEFAULT_NOTE_ICON));
     expect(screen.getByRole("combobox", { name: "Font" })).toBeDisabled();
     expect(screen.getByRole("spinbutton", { name: "Font Size" })).toBeDisabled();
     expect(screen.getByLabelText("Kolor tła")).toBeDisabled();
@@ -263,12 +277,15 @@ describe("App shell", () => {
 
   it("uses a new note's generated default title in the browser tab", async () => {
     const repository = createNoteRepository(`app-new-tab-title-test-${crypto.randomUUID()}`);
+    await saveNote({ ...createNote("Existing", "", 10), icon: "💡" }, repository, 10);
     render(<App repository={repository} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
     fireEvent.click(screen.getByRole("button", { name: "+ Nowa notatka" }));
 
     await waitFor(() => expect(document.title).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/));
+    expect(favicon()).toBe(createEmojiFavicon(DEFAULT_NOTE_ICON));
+    expect((await repository.getMostRecent())?.icon).toBe(DEFAULT_NOTE_ICON);
   });
 
   it("falls back to the application title when a hydrated note title is invalid", async () => {
@@ -407,4 +424,133 @@ describe("App shell", () => {
     expect(await repository.getBySlug(b.slug)).toEqual(b);
   });
 
+});
+
+describe("per-note icons", () => {
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/");
+    window.localStorage.clear();
+  });
+
+  it("updates favicon immediately, preserves committed title/slug and restores the icon from IndexedDB", async () => {
+    const repository = createNoteRepository(`icons-${crypto.randomUUID()}`);
+    const original = await saveNote(createNote("Original", "body", 10), repository, 10);
+    const view = render(<App repository={repository} autoSaveDelay={0} />);
+    await waitFor(() => expect(screen.getByLabelText("Tytuł notatki")).toHaveValue("Original"));
+    fireEvent.input(screen.getByLabelText("Tytuł notatki"), { target: { value: "Unconfirmed" } });
+    chooseIcon("💡");
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("💡")));
+    expect(document.title).toBe("Original");
+    await waitFor(async () => expect((await repository.getBySlug(original.slug))?.icon).toBe("💡"));
+    expect((await repository.getBySlug(original.slug))?.title).toBe("Original");
+    fireEvent.input(screen.getByLabelText("Treść notatki"), { target: { value: "updated" } });
+    await waitFor(async () => expect((await repository.getBySlug(original.slug))?.content).toBe("updated"));
+    view.unmount();
+    render(<App repository={repository} />);
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("💡")));
+    expect(screen.getByRole("button", { name: "Zmień ikonę notatki" })).toHaveTextContent("💡");
+  });
+
+  it("validates custom emoji and closes the picker with keyboard or outside click", async () => {
+    const repository = repositoryFromNotes([createNote("A")]);
+    render(<App repository={repository} autoSaveDelay={0} />);
+    const button = screen.getByRole("button", { name: "Zmień ikonę notatki" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    const input = screen.getByLabelText("Własne emoji");
+    await waitFor(() => expect(input).toHaveFocus());
+    fireEvent.input(input, { target: { value: "💡📚" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(screen.getByRole("alert")).toHaveTextContent("Wpisz jedno emoji.");
+    expect(button).toHaveTextContent(DEFAULT_NOTE_ICON);
+    fireEvent.input(input, { target: { value: "👩‍💻" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("👩‍💻")));
+    expect(screen.queryByRole("dialog", { name: "Ikona notatki" })).toBeNull();
+    expect(button).toHaveFocus();
+    await waitFor(async () => expect((await repository.getMostRecent())?.icon).toBe("👩‍💻"));
+    fireEvent.click(button);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Ikona notatki" })).toBeNull();
+    expect(button).toHaveFocus();
+    fireEvent.click(button);
+    fireEvent(document.body, new Event("pointerdown", { bubbles: true }));
+    expect(screen.queryByRole("dialog", { name: "Ikona notatki" })).toBeNull();
+  });
+
+  it("flushes an icon before immediate switching and reads legacy notes without rewriting them", async () => {
+    const a = { ...createNote("A", "", 20), icon: "💡" };
+    const b = createNote("B", "", 10);
+    delete b.icon;
+    const repository = repositoryFromNotes([a, b]);
+    render(<App repository={repository} autoSaveDelay={60_000} />);
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("💡")));
+    chooseIcon("📚");
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.click(screen.getByRole("button", { name: "B" }));
+    await waitFor(() => expect(screen.getByLabelText("Tytuł notatki")).toHaveValue("B"));
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon(DEFAULT_NOTE_ICON)));
+    expect((await repository.getBySlug(a.slug))?.icon).toBe("📚");
+    expect(await repository.getBySlug(b.slug)).toEqual(b);
+  });
+
+  it.each(["autosave", "rename"])("keeps the latest emoji when changed during a pending %s", async (operation) => {
+    const original = createNote("Original", "", 10);
+    const repository = repositoryFromNotes([original]);
+    const save = repository.save;
+    const gate = deferred<void>();
+    const started = deferred<void>();
+    let firstSave = true;
+    repository.save = async (note) => {
+      if (firstSave) { firstSave = false; started.resolve(); await gate.promise; }
+      await save(note);
+    };
+    render(<App repository={repository} autoSaveDelay={0} />);
+    await waitFor(() => expect(screen.getByLabelText("Tytuł notatki")).toHaveValue("Original"));
+    if (operation === "rename") {
+      fireEvent.input(screen.getByLabelText("Tytuł notatki"), { target: { value: "Renamed" } });
+      fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
+    } else chooseIcon("💡");
+    await started.promise;
+    chooseIcon("📚");
+    gate.resolve();
+    const slug = operation === "rename" ? "renamed" : original.slug;
+    await waitFor(async () => expect((await repository.getBySlug(slug))?.icon).toBe("📚"));
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("📚")));
+    expect((await repository.getBySlug(slug))?.id).toBe(original.id);
+    if (operation === "rename") expect(await repository.getBySlug(original.slug)).toBeUndefined();
+  });
+
+  it("flushes icon on popstate and resets favicon on an invalid route", async () => {
+    const a = createNote("A", "", 20);
+    const b = { ...createNote("B", "", 10), icon: "🇵🇱" };
+    const repository = repositoryFromNotes([a, b]);
+    render(<App repository={repository} autoSaveDelay={60_000} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Zmień ikonę notatki" })).toBeEnabled());
+    chooseIcon("💡");
+    window.history.replaceState({}, "", `/notatki/${b.slug}`);
+    fireEvent(window, new PopStateEvent("popstate"));
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("🇵🇱")));
+    expect((await repository.getBySlug(a.slug))?.icon).toBe("💡");
+    window.history.replaceState({}, "", "/invalid/path");
+    fireEvent(window, new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.getByText("Nie znaleziono strony")).toBeInTheDocument());
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon(DEFAULT_NOTE_ICON)));
+    expect(document.title).toBe("Lokalne notatki");
+  });
+
+  it("keeps the current icon and displays an error if navigation cannot flush it", async () => {
+    const a = createNote("A", "", 20);
+    const b = createNote("B", "", 10);
+    const repository = repositoryFromNotes([a, b]);
+    repository.save = async () => { throw new Error("Brak miejsca"); };
+    render(<App repository={repository} autoSaveDelay={60_000} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Zmień ikonę notatki" })).toBeEnabled());
+    chooseIcon("💡");
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.click(screen.getByRole("button", { name: "B" }));
+    await waitFor(() => expect(screen.getByText("Brak miejsca")).toBeInTheDocument());
+    await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("💡")));
+    expect(await repository.getBySlug(a.slug)).toEqual(a);
+  });
 });

@@ -27,6 +27,8 @@ describe("save coordinator", () => {
     expect(first.title).toBe(second.title);
     expect(first.slug).not.toBe(second.slug);
     expect(first.content).toBe("");
+    expect(first.icon).toBe("📝");
+    expect(second.icon).toBe("📝");
   });
 
   it("preserves the committed slug during content autosave", async () => {
@@ -140,13 +142,16 @@ describe("save coordinator", () => {
     const b = createNewNote();
     expect(a.preferences).not.toBe(b.preferences);
     a.preferences!.fontFamily = "IBM Plex Serif";
+    a.icon = "👩‍💻";
     expect(b.preferences!.fontFamily).toBe("IBM Plex Mono");
     const repository = createNoteRepository(`appearance-${crypto.randomUUID()}`);
     const saved = await saveNewNote(a, repository);
     const coordinator = createSaveCoordinator({ repository });
     coordinator.schedule({ ...saved, content: "updated" });
     await coordinator.flush();
+    expect((await repository.getBySlug(saved.slug))?.icon).toBe("👩‍💻");
     const renamed = await renameNote({ ...saved, title: "Renamed", content: "updated" }, repository);
+    expect((await repository.getBySlug(renamed.slug))?.icon).toBe("👩‍💻");
     expect((await repository.getBySlug(renamed.slug))?.preferences).toEqual(a.preferences);
     coordinator.dispose();
   });
