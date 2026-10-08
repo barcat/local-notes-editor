@@ -1,3 +1,4 @@
+import { DEFAULT_NOTE_ICON } from "./noteIcon";
 import { DEFAULT_PREFERENCES } from "./preferences";
 import { addSlugSuffix, firstAvailableSlug, slugify } from "./slug";
 import type { Note, NoteRepository } from "./types";
@@ -34,6 +35,7 @@ export function createNote(title = "", content = "", now = Date.now()): Note {
     title: normalizeNoteTitle(title),
     slug: slugify(title),
     content,
+    icon: DEFAULT_NOTE_ICON,
     updatedAt: now,
     preferences: { ...DEFAULT_PREFERENCES },
   };
