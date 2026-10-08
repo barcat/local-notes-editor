@@ -1,3 +1,4 @@
+import { normalizeNoteIcon } from "../noteIcon";
 import type { Note } from "../types";
 
 interface NotesListProps {
@@ -5,10 +6,11 @@ interface NotesListProps {
   activeSlug?: string;
   search: string;
   onSearchChange: (value: string) => void;
+  disabled?: boolean;
   onSelect: (slug: string) => void;
 }
 
-export function NotesList({ notes, activeSlug, search, onSearchChange, onSelect }: NotesListProps) {
+export function NotesList({ notes, activeSlug, search, onSearchChange, onSelect, disabled }: NotesListProps) {
   const normalizedSearch = search.trim().toLocaleLowerCase("pl-PL");
   const filteredNotes = notes.filter((note) => note.title.toLocaleLowerCase("pl-PL").includes(normalizedSearch));
 
@@ -32,12 +34,15 @@ export function NotesList({ notes, activeSlug, search, onSearchChange, onSelect 
         <nav class="notes-list" aria-label="Lista notatek">
           {filteredNotes.map((note) => (
             <button
+              key={note.id}
               class={`note-list-item${note.slug === activeSlug ? " is-active" : ""}`}
               type="button"
+              disabled={disabled}
               aria-current={note.slug === activeSlug ? "page" : undefined}
               onClick={() => onSelect(note.slug)}
             >
-              {note.title}
+              <span aria-hidden="true">{normalizeNoteIcon(note.icon)}</span>
+              <span>{note.title}</span>
             </button>
           ))}
         </nav>

@@ -167,6 +167,9 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
 .error-toast button { padding: 0 4px; border: 0; background: transparent; color: inherit; font-size: 20px; line-height: 1; }
 .notes-list { display: grid; gap: 4px; margin: 0 4px; }
 .note-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   min-height: 42px;
   padding: 8px 12px;
@@ -320,3 +323,18 @@ button:disabled, input:disabled { cursor: default; opacity: .55; }
 .note-icon-custom input { min-width: 0; width: 100%; padding: 6px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-surface); color: var(--panel-text); }
 .note-icon-custom button { padding: 6px 10px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-hover); color: var(--panel-text); }
 .note-icon-panel p { margin: 8px 0 0; color: var(--danger); }
+
+.all-notes {
+  min-height: 100vh;
+  padding: 48px clamp(32px, 6vw, 96px);
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  font: 16px/1.6 "IBM Plex Sans", sans-serif;
+}
+.all-notes-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 32px; }
+.all-notes-header h1 { margin: 0; font-size: 28px; }
+.all-notes-actions { display: flex; gap: 12px; }
+.all-notes-actions button { width: auto; margin: 0; }
+.all-notes .search { width: 100%; }
+.note-list-item span:last-child { overflow-wrap: anywhere; }
+.all-notes .note-list-item { padding: 16px; }

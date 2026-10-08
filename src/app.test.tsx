@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmojiFavicon, DEFAULT_NOTE_ICON } from "./noteIcon";
 import { App } from "./app";
 import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from "./preferences";
@@ -553,4 +553,191 @@ describe("per-note icons", () => {
     await waitFor(() => expect(favicon()).toBe(createEmojiFavicon("💡")));
     expect(await repository.getBySlug(a.slug)).toEqual(a);
   });
+});
+
+
+describe("all notes view", () => {
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/notatki");
+    window.localStorage.clear();
+  });
+
+  const first = () => ({ ...createNote("Pierwsza", "treść A", 10), slug: "pierwsza", icon: "💡" });
+  const second = () => ({ ...createNote("Druga", "treść B", 20), slug: "druga", icon: undefined });
+  const list = () => screen.getByRole("navigation", { name: "Lista notatek" });
+  const openList = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wszystkie notatki" }));
+  };
+
+  it("loads every note in repository order, searches titles and resets tab metadata without writes", async () => {
+    const notes = [first(), second(), ...Array.from({ length: 30 }, (_, i) => ({ ...createNote(`Notatka ${i}`, "", 30 + i), slug: `notatka-${i}` }))];
+    const repository = repositoryFromNotes(notes);
+    repository.save = vi.fn(repository.save);
+    repository.getMostRecent = vi.fn(repository.getMostRecent);
+    repository.getBySlug = vi.fn(repository.getBySlug);
+    document.title = "Poprzednia";
+    render(<App repository={repository} />);
+    await waitFor(() => expect(within(list()).getAllByRole("button")).toHaveLength(32));
+    expect(within(list()).getAllByRole("button").map(b => b.textContent)).toEqual([...notes].sort((a, b) => b.updatedAt - a.updatedAt).map(n => `${n.icon ?? DEFAULT_NOTE_ICON}${n.title}`));
+    fireEvent.input(screen.getByRole("searchbox"), { target: { value: "PIERWSZA" } });
+    expect(within(list()).getAllByRole("button")).toHaveLength(1);
+    expect(document.title).toBe("Lokalne notatki");
+    expect(favicon()).toBe(createEmojiFavicon(DEFAULT_NOTE_ICON));
+    expect(repository.save).not.toHaveBeenCalled();
+    expect(repository.getMostRecent).not.toHaveBeenCalled();
+    expect(repository.getBySlug).not.toHaveBeenCalled();
+    fireEvent.input(screen.getByRole("searchbox"), { target: { value: "nie istnieje" } });
+    expect(screen.getByText("Brak pasujących notatek.")).toBeInTheDocument();
+  });
+
+  it("handles an empty list and returns to an empty editor", async () => {
+    render(<App repository={repositoryFromNotes([])} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Wróć do edytora" })).toBeEnabled());
+    expect(screen.getByText("Nie masz jeszcze żadnych notatek.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Wróć do edytora" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue(""));
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("opens a note with its appearance, title and favicon, and returns to it from the list", async () => {
+    const note = { ...first(), preferences: { ...DEFAULT_PREFERENCES, fontFamily: "IBM Plex Serif" as const } };
+    render(<App repository={repositoryFromNotes([note, second()])} />);
+    await waitFor(() => expect(within(list()).getByRole("button", { name: "Pierwsza" })).toBeEnabled());
+    fireEvent.click(within(list()).getByRole("button", { name: "Pierwsza" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue(note.content));
+    expect(window.location.pathname).toBe("/notatki/pierwsza");
+    await waitFor(() => expect(document.title).toBe(note.title));
+    expect(favicon()).toBe(createEmojiFavicon(note.icon));
+    expect(document.documentElement.style.getPropertyValue("--editor-font-family")).toContain("IBM Plex Serif");
+    openList();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Wszystkie notatki" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Wróć do edytora" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Wróć do edytora" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue(note.content));
+  });
+
+  it("persists a new note from the list without overwriting existing notes", async () => {
+    const note = first();
+    const repository = repositoryFromNotes([note]);
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Nowa notatka" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Nowa notatka" }));
+    await waitFor(() => expect((screen.getByPlaceholderText("Bez tytułu") as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2} /));
+    expect(await repository.listMostRecent()).toHaveLength(2);
+    expect(await repository.getBySlug(note.slug)).toEqual(note);
+  });
+
+  it("flushes text, icon and appearance before opening the list and preserves the committed title", async () => {
+    window.history.replaceState({}, "", "/notatki/pierwsza");
+    const repository = repositoryFromNotes([first()]);
+    render(<App repository={repository} autoSaveDelay={60000} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+    fireEvent.input(screen.getByPlaceholderText("Zacznij pisać…"), { target: { value: "nowa treść" } });
+    fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Niepotwierdzony" } });
+    chooseIcon("🎯");
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Sans" } });
+    fireEvent.click(screen.getByRole("button", { name: "Wszystkie notatki" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/notatki"));
+    expect(await repository.getBySlug("pierwsza")).toMatchObject({ title: "Pierwsza", content: "nowa treść", icon: "🎯", preferences: { fontFamily: "IBM Plex Sans" } });
+    await waitFor(() => expect(within(list()).getByRole("button", { name: "Pierwsza" })).toBeEnabled());
+  });
+
+  it("keeps the editor and URL when flush fails, and permits retry", async () => {
+    window.history.replaceState({}, "", "/notatki/pierwsza");
+    const repository = repositoryFromNotes([first()]);
+    const save = repository.save;
+    repository.save = async () => { throw new Error("Brak miejsca"); };
+    render(<App repository={repository} autoSaveDelay={60000} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+    fireEvent.input(screen.getByPlaceholderText("Zacznij pisać…"), { target: { value: "zachowaj mnie" } });
+    openList();
+    await waitFor(() => expect(screen.getByText("Brak miejsca")).toBeInTheDocument());
+    expect(window.location.pathname).toBe("/notatki/pierwsza");
+    expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue("zachowaj mnie");
+    repository.save = save;
+    fireEvent.click(screen.getByRole("button", { name: "Wszystkie notatki" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/notatki"));
+    expect((await repository.getBySlug("pierwsza"))?.content).toBe("zachowaj mnie");
+  });
+
+  it("refreshes the list after remount and on Back/Forward without editor writes", async () => {
+    const repository = repositoryFromNotes([first(), second()]);
+    repository.save = vi.fn(repository.save);
+    const mounted = render(<App repository={repository} />);
+    await waitFor(() => expect(list()).toBeInTheDocument());
+    mounted.unmount();
+    render(<App repository={repository} />);
+    await waitFor(() => expect(within(list()).getByRole("button", { name: "Pierwsza" })).toBeEnabled());
+    fireEvent.click(within(list()).getByRole("button", { name: "Pierwsza" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+    window.history.back();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Wszystkie notatki" })).toBeInTheDocument());
+    window.history.forward();
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it("refreshes externally added notes on history navigation to the list", async () => {
+    window.history.replaceState({}, "", "/notatki/pierwsza");
+    const repository = repositoryFromNotes([first()]);
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+    await repository.save(second());
+    window.history.pushState({}, "", "/notatki");
+    fireEvent(window, new PopStateEvent("popstate"));
+    await waitFor(() => expect(within(list()).getAllByRole("button")).toHaveLength(2));
+  });
+  it("restores the editor URL when history navigation cannot save the draft", async () => {
+    window.history.replaceState({}, "", "/notatki/pierwsza");
+    const repository = repositoryFromNotes([first()]);
+    repository.save = async () => { throw new Error("Błąd zapisu"); };
+    render(<App repository={repository} autoSaveDelay={60000} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+    fireEvent.input(screen.getByPlaceholderText("Zacznij pisać…"), { target: { value: "nie zgub" } });
+    window.history.pushState({}, "", "/notatki");
+    fireEvent(window, new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.getByText("Błąd zapisu")).toBeInTheDocument());
+    expect(window.location.pathname).toBe("/notatki/pierwsza");
+    expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue("nie zgub");
+  });
+
+  it("blocks navigation while a title save is pending and lists the confirmed title afterwards", async () => {
+    window.history.replaceState({}, "", "/notatki/pierwsza");
+    const repository = repositoryFromNotes([first()]);
+    const pending = deferred<void>();
+    const save = repository.save;
+    repository.save = async (note) => { await pending.promise; await save(note); };
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Pierwsza"));
+    fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Zapisany tytuł" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    expect(screen.getByRole("button", { name: "Wszystkie notatki" })).toBeDisabled();
+    window.history.pushState({}, "", "/notatki");
+    fireEvent(window, new PopStateEvent("popstate"));
+    expect(window.location.pathname).toBe("/notatki/pierwsza");
+    pending.resolve();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Wszystkie notatki" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Wszystkie notatki" }));
+    await waitFor(() => expect(within(list()).getByRole("button", { name: "Zapisany tytuł" })).toBeInTheDocument());
+  });
+
+  it("ignores an older pending navigation when history returns to the list", async () => {
+    const repository = repositoryFromNotes([first()]);
+    const pending = deferred<Note | undefined>();
+    repository.getBySlug = () => pending.promise;
+    render(<App repository={repository} />);
+    await waitFor(() => expect(within(list()).getByRole("button", { name: "Pierwsza" })).toBeEnabled());
+    fireEvent.click(within(list()).getByRole("button", { name: "Pierwsza" }));
+    window.history.pushState({}, "", "/notatki");
+    fireEvent(window, new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Wróć do edytora" })).toBeEnabled());
+    pending.resolve(first());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Wszystkie notatki" })).toBeInTheDocument());
+    expect(window.location.pathname).toBe("/notatki");
+    expect(screen.queryByPlaceholderText("Zacznij pisać…")).toBeNull();
+  });
+
 });

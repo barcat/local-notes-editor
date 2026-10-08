@@ -1,7 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { buildEditorPath, parseRoute, PENDING_PATH_STORAGE_KEY, restorePendingPath, stripBasePath } from "./routing";
+import { buildEditorPath, buildNotesPath, parseRoute, PENDING_PATH_STORAGE_KEY, restorePendingPath, stripBasePath } from "./routing";
 
 describe("routing", () => {
+  it("parses and builds the list route without conflicting with note routes", () => {
+    for (const base of ["/", "/local-notes-editor/"]) {
+      const path = buildNotesPath(base);
+      expect(parseRoute(path, base)).toEqual({ kind: "list" });
+      expect(parseRoute(`${path}/`, base)).toEqual({ kind: "list" });
+      expect(parseRoute(`${path}/test`, base)).toEqual({ kind: "editor", slug: "test" });
+    }
+    expect(buildNotesPath("/")).toBe("/notatki");
+    expect(buildNotesPath("/local-notes-editor/")).toBe("/local-notes-editor/notatki");
+  });
+
+  it("restores a direct list URL after the GitHub Pages fallback", () => {
+    const storage = { getItem: () => "/local-notes-editor/notatki", removeItem: () => {} };
+    restorePendingPath("/local-notes-editor/", storage);
+    expect(parseRoute(window.location.pathname, "/local-notes-editor/")).toEqual({ kind: "list" });
+  });
   it("parses root and note routes with a GitHub Pages base path", () => {
     expect(parseRoute("/local-notes-editor/", "/local-notes-editor/")).toEqual({ kind: "editor" });
     expect(parseRoute("/local-notes-editor/notatki/moj-pomysl", "/local-notes-editor/")).toEqual({
