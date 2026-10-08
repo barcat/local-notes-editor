@@ -8,6 +8,7 @@ import type { EditorPreferences } from "../types";
 
 interface AppearanceSettingsProps {
   preferences: EditorPreferences;
+  disabled?: boolean;
   storageWarning?: string | null;
   onChange: (patch: Partial<EditorPreferences>) => void;
   onResetColors: () => void;
@@ -16,10 +17,11 @@ interface AppearanceSettingsProps {
 interface ColorControlProps {
   label: string;
   value: string;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }
 
-function ColorControl({ label, value, onChange }: ColorControlProps) {
+function ColorControl({ label, value, disabled, onChange }: ColorControlProps) {
   const [hexValue, setHexValue] = useState(value);
 
   useEffect(() => setHexValue(value), [value]);
@@ -37,6 +39,7 @@ function ColorControl({ label, value, onChange }: ColorControlProps) {
   return (
     <span class="color-control">
       <input
+        disabled={disabled}
         class="color-picker"
         type="color"
         value={value}
@@ -44,6 +47,7 @@ function ColorControl({ label, value, onChange }: ColorControlProps) {
         onInput={(event) => commit(event.currentTarget.value)}
       />
       <input
+        disabled={disabled}
         class="hex-input"
         type="text"
         inputMode="text"
@@ -59,25 +63,25 @@ function ColorControl({ label, value, onChange }: ColorControlProps) {
   );
 }
 
-export function AppearanceSettings({ preferences, storageWarning, onChange, onResetColors }: AppearanceSettingsProps) {
+export function AppearanceSettings({ preferences, disabled, storageWarning, onChange, onResetColors }: AppearanceSettingsProps) {
   const contrastWarning = !hasSufficientContrast(preferences);
 
   return (
     <>
       <section class="settings-card" aria-labelledby="appearance-title">
-        <h2 class="card-title" id="appearance-title">Appearance</h2>
+        <h2 class="card-title" id="appearance-title">Wygląd notatki</h2>
         <label class="setting-row">
           <span class="setting-label">Background</span>
-          <ColorControl label="Kolor tła" value={preferences.backgroundColor} onChange={(value) => onChange({ backgroundColor: value })} />
+          <ColorControl disabled={disabled} label="Kolor tła" value={preferences.backgroundColor} onChange={(value) => onChange({ backgroundColor: value })} />
         </label>
         <label class="setting-row">
           <span class="setting-label">Font Color</span>
-          <ColorControl label="Kolor tekstu" value={preferences.textColor} onChange={(value) => onChange({ textColor: value })} />
+          <ColorControl disabled={disabled} label="Kolor tekstu" value={preferences.textColor} onChange={(value) => onChange({ textColor: value })} />
         </label>
         {contrastWarning && (
           <div class="contrast-warning" role="alert">
             <span>Kontrast kolorów jest niższy niż 4.5:1.</span>
-            <button type="button" onClick={onResetColors}>Przywróć domyślne kolory</button>
+            <button type="button" disabled={disabled} onClick={onResetColors}>Przywróć domyślne kolory</button>
           </div>
         )}
       </section>
@@ -87,6 +91,7 @@ export function AppearanceSettings({ preferences, storageWarning, onChange, onRe
         <label class="setting-row">
           <span class="setting-label">Font</span>
           <select
+            disabled={disabled}
             class="select"
             value={preferences.fontFamily}
             onChange={(event) => onChange({ fontFamily: event.currentTarget.value as EditorPreferences["fontFamily"] })}
@@ -97,6 +102,7 @@ export function AppearanceSettings({ preferences, storageWarning, onChange, onRe
         <label class="setting-row">
           <span class="setting-label">Font Size</span>
           <input
+            disabled={disabled}
             class="number-input"
             type="number"
             min="10"
@@ -109,6 +115,7 @@ export function AppearanceSettings({ preferences, storageWarning, onChange, onRe
         <label class="setting-row">
           <span class="setting-label">Line Height</span>
           <input
+            disabled={disabled}
             class="number-input"
             type="number"
             min="1.2"
@@ -121,6 +128,7 @@ export function AppearanceSettings({ preferences, storageWarning, onChange, onRe
         <label class="setting-row">
           <span class="setting-label">Width (px)</span>
           <input
+            disabled={disabled}
             class="number-input"
             type="number"
             min="480"

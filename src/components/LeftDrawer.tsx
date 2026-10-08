@@ -14,6 +14,7 @@ interface LeftDrawerProps {
   onSearchChange: (value: string) => void;
   onSelectNote: (slug: string) => void;
   preferences: EditorPreferences;
+  appearanceDisabled?: boolean;
   preferencesStorageWarning: string | null;
   onPreferencesChange: (patch: Partial<EditorPreferences>) => void;
   onResetColors: () => void;
@@ -44,6 +45,7 @@ export function LeftDrawer({
   onSearchChange,
   onSelectNote,
   preferences,
+  appearanceDisabled,
   preferencesStorageWarning,
   onPreferencesChange,
   onResetColors,
@@ -127,6 +129,7 @@ export function LeftDrawer({
 
           <AppearanceSettings
             preferences={preferences}
+            disabled={appearanceDisabled}
             storageWarning={preferencesStorageWarning}
             onChange={onPreferencesChange}
             onResetColors={onResetColors}

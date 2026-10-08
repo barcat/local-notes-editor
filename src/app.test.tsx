@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./app";
-import { PREFERENCES_STORAGE_KEY } from "./preferences";
+import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from "./preferences";
 import { createNote, saveNote } from "./noteOperations";
 import { createNoteRepository } from "./noteRepository";
 import type { Note, NoteRepository } from "./types";
@@ -28,6 +28,7 @@ describe("App shell", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/");
     document.title = "Lokalne notatki";
+    window.localStorage.clear();
   });
 
   it("opens the drawer, moves focus inside and closes it with Escape", async () => {
@@ -50,9 +51,10 @@ describe("App shell", () => {
   it("offers only IBM Plex fonts and restores the selected font on remount", async () => {
     window.localStorage.removeItem(PREFERENCES_STORAGE_KEY);
     const repository = repositoryFromNotes([]);
-    const firstRender = render(<App repository={repository} />);
+    const firstRender = render(<App repository={repository} autoSaveDelay={0} />);
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
     const select = screen.getByRole("combobox", { name: "Font" });
+    await waitFor(() => expect(select).toBeEnabled());
     expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual([
       "IBM Plex Mono", "IBM Plex Sans", "IBM Plex Serif",
     ]);
@@ -65,13 +67,15 @@ describe("App shell", () => {
     ]) {
       fireEvent.change(select, { target: { value: fontFamily } });
       await waitFor(() => expect(document.documentElement.style.getPropertyValue("--editor-font-family")).toBe(`"${fontFamily}", ${fallback}`));
-      expect(JSON.parse(window.localStorage.getItem(PREFERENCES_STORAGE_KEY)!).fontFamily).toBe(fontFamily);
+      await waitFor(async () => expect((await repository.getMostRecent())?.preferences?.fontFamily).toBe(fontFamily));
+      expect(window.localStorage.getItem(PREFERENCES_STORAGE_KEY)).toBeNull();
     }
     fireEvent.change(select, { target: { value: "IBM Plex Serif" } });
+    await waitFor(async () => expect((await repository.getMostRecent())?.preferences?.fontFamily).toBe("IBM Plex Serif"));
     firstRender.unmount();
     render(<App repository={repository} />);
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif"));
     window.localStorage.removeItem(PREFERENCES_STORAGE_KEY);
   });
 
@@ -249,6 +253,9 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
     fireEvent.click(screen.getByRole("button", { name: "Starsza notatka" }));
     await waitFor(() => expect(document.title).toBe("Lokalne notatki"));
+    expect(screen.getByRole("combobox", { name: "Font" })).toBeDisabled();
+    expect(screen.getByRole("spinbutton", { name: "Font Size" })).toBeDisabled();
+    expect(screen.getByLabelText("Kolor tła")).toBeDisabled();
 
     olderLookup.resolve(older);
     await waitFor(() => expect(document.title).toBe("Starsza notatka"));
@@ -280,4 +287,124 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue(""));
     await waitFor(() => expect(document.title).toBe("Lokalne notatki"));
   });
+  it("flushes appearance before an immediate switch and keeps notes independent", async () => {
+    const first = createNote("A", "a", 20);
+    const second = { ...createNote("B", "b", 10), preferences: { ...DEFAULT_PREFERENCES, fontFamily: "IBM Plex Sans" as const, textColor: "#ffffff" } };
+    const repository = repositoryFromNotes([first, second]);
+    const view = render(<App repository={repository} autoSaveDelay={60_000} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A"));
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Serif" } });
+    fireEvent.click(screen.getByRole("button", { name: "B" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("B"));
+    expect((await repository.getBySlug(first.slug))?.preferences?.fontFamily).toBe("IBM Plex Serif");
+    expect(await repository.getBySlug(second.slug)).toEqual(second);
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--editor-text")).toBe("#ffffff"));
+    view.unmount();
+    render(<App repository={repository} />);
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--editor-font-family")).toBe('"IBM Plex Sans", sans-serif'));
+  });
+
+  it("uses defaults for new notes", async () => {
+    const custom = { ...createNote("Custom", "", 10), preferences: { ...DEFAULT_PREFERENCES, fontSizePt: 22 } };
+    const repository = repositoryFromNotes([custom]);
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Custom"));
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Nowa notatka" }));
+    await waitFor(async () => expect(await repository.listMostRecent()).toHaveLength(2));
+    expect((await repository.getMostRecent())?.preferences).toEqual(DEFAULT_PREFERENCES);
+    expect((await repository.getBySlug(custom.slug))?.preferences?.fontSizePt).toBe(22);
+  });
+
+  it("preserves legacy appearance without writing on read and migrates it on content save", async () => {
+    const legacy = createNote("Legacy", "", 10);
+    delete legacy.preferences;
+    const preferences = { ...DEFAULT_PREFERENCES, fontSizePt: 19, textColor: "#ffffff" };
+    window.localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+    const repository = repositoryFromNotes([legacy]);
+    render(<App repository={repository} autoSaveDelay={0} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Legacy"));
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--editor-font-size")).toBe("19pt"));
+    expect(await repository.getBySlug(legacy.slug)).toEqual(legacy);
+    fireEvent.input(screen.getByPlaceholderText("Zacznij pisać…"), { target: { value: "updated" } });
+    await waitFor(async () => expect((await repository.getBySlug(legacy.slug))?.preferences).toEqual(preferences));
+  });
+
+  it("resets only the active note's colors", async () => {
+    const preferences = { ...DEFAULT_PREFERENCES, textColor: "#ffffff", backgroundColor: "#ffffff", fontSizePt: 18 };
+    const a = { ...createNote("A", "", 20), preferences };
+    const b = { ...createNote("B", "", 10), preferences: { ...preferences } };
+    const repository = repositoryFromNotes([a, b]);
+    render(<App repository={repository} autoSaveDelay={0} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A"));
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Przywróć domyślne kolory" }));
+    await waitFor(async () => expect((await repository.getBySlug(a.slug))?.preferences).toEqual({ ...DEFAULT_PREFERENCES, fontSizePt: 18 }));
+    expect(await repository.getBySlug(b.slug)).toEqual(b);
+  });
+
+  it("keeps appearance changes made while the title save is pending", async () => {
+    const original = createNote("Original", "", 10);
+    const repository = repositoryFromNotes([original]);
+    const save = repository.save;
+    const gate = deferred<void>();
+    const started = deferred<void>();
+    repository.save = async (note) => {
+      if (note.title === "Renamed") {
+        started.resolve();
+        await gate.promise;
+      }
+      await save(note);
+    };
+    render(<App repository={repository} autoSaveDelay={0} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("Original"));
+    fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
+    await started.promise;
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Serif" } });
+    gate.resolve();
+    await waitFor(async () => expect((await repository.getBySlug("renamed"))?.preferences?.fontFamily).toBe("IBM Plex Serif"));
+    expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif");
+    expect(await repository.getBySlug("original")).toBeUndefined();
+  });
+
+  it("unlocks appearance after a navigation save failure and preserves the draft", async () => {
+    const a = createNote("A", "", 20);
+    const b = createNote("B", "", 10);
+    const repository = repositoryFromNotes([a, b]);
+    repository.save = async () => { throw new Error("Brak miejsca"); };
+    render(<App repository={repository} autoSaveDelay={60_000} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A"));
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Serif" } });
+    fireEvent.click(screen.getByRole("button", { name: "B" }));
+    await waitFor(() => expect(screen.getByText("Brak miejsca")).toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Font" })).toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif");
+    expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A");
+    expect(await repository.getBySlug(a.slug)).toEqual(a);
+  });
+
+  it("flushes pending appearance on browser navigation", async () => {
+    const a = createNote("A", "", 20);
+    const b = createNote("B", "", 10);
+    const repository = repositoryFromNotes([a, b]);
+    render(<App repository={repository} autoSaveDelay={60_000} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A"));
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
+    fireEvent.input(screen.getByRole("spinbutton", { name: "Font Size" }), { target: { value: "20" } });
+    fireEvent.input(screen.getByRole("spinbutton", { name: "Line Height" }), { target: { value: "2" } });
+    fireEvent.input(screen.getByRole("spinbutton", { name: "Width (px)" }), { target: { value: "800" } });
+    fireEvent.input(screen.getByLabelText("Kolor tła"), { target: { value: "#123456" } });
+    window.history.replaceState({}, "", `/notatki/${b.slug}`);
+    fireEvent(window, new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("B"));
+    expect((await repository.getBySlug(a.slug))?.preferences).toEqual({
+      ...DEFAULT_PREFERENCES, fontSizePt: 20, lineHeight: 2, editorWidthPx: 800, backgroundColor: "#123456",
+    });
+    expect(await repository.getBySlug(b.slug)).toEqual(b);
+  });
+
 });

@@ -4,9 +4,11 @@ export interface Note {
   slug: string;
   content: string;
   updatedAt: number;
+  preferences?: EditorPreferences;
 }
 
 export interface NoteDraft {
+  preferences: EditorPreferences;
   id?: string;
   title: string;
   content: string;

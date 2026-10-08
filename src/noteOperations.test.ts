@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNewNote, createNote, createSaveCoordinator, createTextExport, formatNoteTimestampTitle, saveNewNote } from "./noteOperations";
+import { createNewNote, createNote, createSaveCoordinator, createTextExport, formatNoteTimestampTitle, renameNote, saveNewNote } from "./noteOperations";
 import { createNoteRepository } from "./noteRepository";
 import type { NoteRepository } from "./types";
 
@@ -135,4 +135,20 @@ describe("save coordinator", () => {
     });
     expect(text).toBe("spacje  \n\nłódź <b>bez HTML</b>");
   });
+  it("gives new notes independent settings and preserves them through autosave and rename", async () => {
+    const a = createNewNote();
+    const b = createNewNote();
+    expect(a.preferences).not.toBe(b.preferences);
+    a.preferences!.fontFamily = "IBM Plex Serif";
+    expect(b.preferences!.fontFamily).toBe("IBM Plex Mono");
+    const repository = createNoteRepository(`appearance-${crypto.randomUUID()}`);
+    const saved = await saveNewNote(a, repository);
+    const coordinator = createSaveCoordinator({ repository });
+    coordinator.schedule({ ...saved, content: "updated" });
+    await coordinator.flush();
+    const renamed = await renameNote({ ...saved, title: "Renamed", content: "updated" }, repository);
+    expect((await repository.getBySlug(renamed.slug))?.preferences).toEqual(a.preferences);
+    coordinator.dispose();
+  });
+
 });
