@@ -1,5 +1,6 @@
 export type Route =
   | { kind: "editor"; slug?: string }
+  | { kind: "list" }
   | { kind: "not-found"; path: string };
 
 export const PENDING_PATH_STORAGE_KEY = "local-notes:pending-path:v1";
@@ -35,6 +36,8 @@ export function parseRoute(pathname = window.location.pathname, basePath = getBa
   const logicalPath = stripBasePath(pathname, basePath);
   if (logicalPath === undefined) return { kind: "not-found", path: pathname };
   if (logicalPath === "/" || logicalPath === "") return { kind: "editor" };
+
+  if (logicalPath === "/notatki" || logicalPath === "/notatki/") return { kind: "list" };
 
   const noteMatch = logicalPath.match(/^\/notatki\/([^/]+)\/?$/);
   if (noteMatch) return { kind: "editor", slug: decodeURIComponent(noteMatch[1]) };
@@ -73,4 +76,8 @@ export function replaceEditorPath(slug?: string, basePath = getBasePath()): void
 
 export function pushEditorPath(slug?: string, basePath = getBasePath()): void {
   window.history.pushState({}, "", buildEditorPath(slug, basePath));
+}
+
+export function buildNotesPath(basePath = getBasePath()): string {
+  return `${buildEditorPath(undefined, basePath)}notatki`;
 }

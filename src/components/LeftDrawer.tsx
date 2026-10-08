@@ -6,6 +6,8 @@ import type { EditorPreferences, Note } from "../types";
 interface LeftDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  onAllNotes: () => void;
+  navigationDisabled?: boolean;
   onNewNote: () => void;
   isCreatingNote?: boolean;
   notes: Note[];
@@ -38,6 +40,8 @@ export function LeftDrawer({
   isOpen,
   onClose,
   onNewNote,
+  onAllNotes,
+  navigationDisabled,
   isCreatingNote = false,
   notes,
   activeSlug,
@@ -117,9 +121,12 @@ export function LeftDrawer({
             </button>
           </header>
 
-          <button class="primary-action" type="button" disabled={isCreatingNote} onClick={onNewNote}>+ Nowa notatka</button>
+          <button class="primary-action" type="button" disabled={isCreatingNote || navigationDisabled} onClick={onNewNote}>+ Nowa notatka</button>
+
+          <button class="secondary-action" type="button" disabled={navigationDisabled} onClick={onAllNotes}>Wszystkie notatki</button>
 
           <NotesList
+            disabled={navigationDisabled}
             notes={notes}
             activeSlug={activeSlug}
             search={search}
