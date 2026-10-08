@@ -37,4 +37,16 @@ describe("IndexedDB note repository", () => {
     expect(await repository.isSlugAvailable(first.slug)).toBe(false);
     expect(await repository.isSlugAvailable(first.slug, first.id)).toBe(true);
   });
+  it("round-trips per-note appearance and still reads legacy records", async () => {
+    const repository = repositoryForTest();
+    const note = createNote("Styled", "text", 10);
+    note.preferences!.fontFamily = "IBM Plex Serif";
+    await repository.save(note);
+    expect(await repository.getBySlug(note.slug)).toEqual(note);
+    const legacy = createNote("Legacy", "", 20);
+    delete legacy.preferences;
+    await repository.save(legacy);
+    expect(await repository.getBySlug(legacy.slug)).toEqual(legacy);
+  });
+
 });

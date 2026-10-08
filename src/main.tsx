@@ -11,7 +11,6 @@ applyPreferences(initialPreferencesResult.preferences);
 render(
   <App
     initialPreferences={initialPreferencesResult.preferences}
-    initialPreferencesError={!initialPreferencesResult.storageAvailable ? "Ustawienia działają tylko do zamknięcia tej karty — localStorage jest niedostępny." : null}
   />,
   document.querySelector<HTMLDivElement>("#app")!,
 );

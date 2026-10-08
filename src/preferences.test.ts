@@ -9,6 +9,7 @@ import {
   isDataNoticeDismissed,
   loadPreferences,
   parsePreferences,
+  normalizePreferences,
   isEditorFontFamily,
   sanitizePreferencesPatch,
   savePreferences,
@@ -147,4 +148,14 @@ describe("editor preferences", () => {
       textColor: "#abcdef",
     });
   });
+  it("normalizes missing, partial and malformed note settings with independent fallbacks", () => {
+    for (const value of [undefined, null, [], "invalid"]) {
+      expect(normalizePreferences(value).preferences).toEqual(DEFAULT_PREFERENCES);
+    }
+    const fallback = { ...DEFAULT_PREFERENCES, fontSizePt: 18 };
+    expect(normalizePreferences({ textColor: "#ABCDEF", lineHeight: 99 }, fallback).preferences)
+      .toEqual({ ...fallback, textColor: "#abcdef" });
+    expect(normalizePreferences(DEFAULT_PREFERENCES).correctedInvalidData).toBe(false);
+  });
+
 });

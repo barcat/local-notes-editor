@@ -74,28 +74,19 @@ export function parsePreferences(raw: string | null): { preferences: EditorPrefe
     parsed = {};
   }
 
-  const backgroundColor = normalizeHexColor(parsed.backgroundColor);
-  const textColor = normalizeHexColor(parsed.textColor);
-  const fontSizePt = boundedNumber(parsed.fontSizePt, 10, 24);
-  const lineHeight = boundedNumber(parsed.lineHeight, 1.2, 2.4);
-  const editorWidthPx = boundedNumber(parsed.editorWidthPx, 480, 1200);
-  const fontFamily = isEditorFontFamily(parsed.fontFamily) ? parsed.fontFamily : undefined;
+  return normalizePreferences(parsed);
+}
 
+export function normalizePreferences(
+  value: unknown,
+  defaults: EditorPreferences = DEFAULT_PREFERENCES,
+): { preferences: EditorPreferences; correctedInvalidData: boolean } {
+  const parsed = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+  const valid = sanitizePreferencesPatch(parsed as Partial<EditorPreferences>);
   return {
-    preferences: {
-      backgroundColor: backgroundColor ?? DEFAULT_PREFERENCES.backgroundColor,
-      textColor: textColor ?? DEFAULT_PREFERENCES.textColor,
-      fontFamily: fontFamily ?? DEFAULT_PREFERENCES.fontFamily,
-      fontSizePt: fontSizePt ?? DEFAULT_PREFERENCES.fontSizePt,
-      lineHeight: lineHeight ?? DEFAULT_PREFERENCES.lineHeight,
-      editorWidthPx: editorWidthPx ?? DEFAULT_PREFERENCES.editorWidthPx,
-    },
-    correctedInvalidData: backgroundColor === undefined
-      || textColor === undefined
-      || fontFamily === undefined
-      || fontSizePt === undefined
-      || lineHeight === undefined
-      || editorWidthPx === undefined,
+    preferences: { ...defaults, ...valid },
+    correctedInvalidData: Object.keys(DEFAULT_PREFERENCES).some((key) => !(key in valid)),
   };
 }
 
