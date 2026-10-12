@@ -63,7 +63,7 @@ describe("App shell", () => {
     const repository = repositoryFromNotes([]);
     const firstRender = render(<App repository={repository} autoSaveDelay={0} />);
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    const select = screen.getByRole("combobox", { name: "Font" });
+    const select = screen.getByRole("combobox", { name: "Krój pisma" });
     await waitFor(() => expect(select).toBeEnabled());
     expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual([
       "IBM Plex Mono", "IBM Plex Sans", "IBM Plex Serif",
@@ -85,7 +85,7 @@ describe("App shell", () => {
     firstRender.unmount();
     render(<App repository={repository} />);
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif"));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Krój pisma" })).toHaveValue("IBM Plex Serif"));
     window.localStorage.removeItem(PREFERENCES_STORAGE_KEY);
   });
 
@@ -181,7 +181,7 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "Zapisz tytuł" })).toBeEnabled();
   });
 
-  it("confirms a normalized title and keeps the same note id", async () => {
+  it.each(["button", "Enter"])("confirms a normalized title with %s and keeps the same note id", async (method) => {
     const repository = createNoteRepository(`app-confirm-title-test-${crypto.randomUUID()}`);
     const original = await saveNote(createNote("Stary tytuł", "treść", 10), repository, 10);
     window.history.replaceState({}, "", `/notatki/${original.slug}`);
@@ -190,7 +190,16 @@ describe("App shell", () => {
     const title = screen.getByPlaceholderText("Bez tytułu");
     await waitFor(() => expect(title).toHaveValue("Stary tytuł"));
     fireEvent.input(title, { target: { value: "  Nowy tytuł  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
+    const saveButton = screen.getByRole("button", { name: "Zapisz tytuł" });
+    if (method === "Enter") {
+      fireEvent.keyDown(title, { key: "Enter", isComposing: true });
+      expect(saveButton).toBeEnabled();
+      fireEvent.keyDown(title, { key: "Enter", repeat: true });
+      expect(saveButton).toBeEnabled();
+      fireEvent.keyDown(title, { key: "Enter" });
+    } else {
+      fireEvent.click(saveButton);
+    }
 
     await waitFor(async () => expect(await repository.getBySlug("nowy-tytul")).toBeDefined());
     const saved = await repository.getBySlug("nowy-tytul");
@@ -267,8 +276,8 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Starsza notatka" }));
     await waitFor(() => expect(document.title).toBe("Lokalne notatki"));
     expect(favicon()).toBe(createEmojiFavicon(DEFAULT_NOTE_ICON));
-    expect(screen.getByRole("combobox", { name: "Font" })).toBeDisabled();
-    expect(screen.getByRole("spinbutton", { name: "Font Size" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Krój pisma" })).toBeDisabled();
+    expect(screen.getByRole("spinbutton", { name: "Rozmiar tekstu" })).toBeDisabled();
     expect(screen.getByLabelText("Kolor tła")).toBeDisabled();
 
     olderLookup.resolve(older);
@@ -311,7 +320,7 @@ describe("App shell", () => {
     const view = render(<App repository={repository} autoSaveDelay={60_000} />);
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A"));
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Serif" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Krój pisma" }), { target: { value: "IBM Plex Serif" } });
     fireEvent.click(screen.getByRole("button", { name: "B" }));
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("B"));
     expect((await repository.getBySlug(first.slug))?.preferences?.fontFamily).toBe("IBM Plex Serif");
@@ -380,10 +389,10 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Zapisz tytuł" }));
     await started.promise;
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Serif" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Krój pisma" }), { target: { value: "IBM Plex Serif" } });
     gate.resolve();
     await waitFor(async () => expect((await repository.getBySlug("renamed"))?.preferences?.fontFamily).toBe("IBM Plex Serif"));
-    expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif");
+    expect(screen.getByRole("combobox", { name: "Krój pisma" })).toHaveValue("IBM Plex Serif");
     expect(await repository.getBySlug("original")).toBeUndefined();
   });
 
@@ -395,11 +404,11 @@ describe("App shell", () => {
     render(<App repository={repository} autoSaveDelay={60_000} />);
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A"));
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Serif" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Krój pisma" }), { target: { value: "IBM Plex Serif" } });
     fireEvent.click(screen.getByRole("button", { name: "B" }));
     await waitFor(() => expect(screen.getByText("Brak miejsca")).toBeInTheDocument());
-    expect(screen.getByRole("combobox", { name: "Font" })).toBeEnabled();
-    expect(screen.getByRole("combobox", { name: "Font" })).toHaveValue("IBM Plex Serif");
+    expect(screen.getByRole("combobox", { name: "Krój pisma" })).toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "Krój pisma" })).toHaveValue("IBM Plex Serif");
     expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A");
     expect(await repository.getBySlug(a.slug)).toEqual(a);
   });
@@ -411,9 +420,9 @@ describe("App shell", () => {
     render(<App repository={repository} autoSaveDelay={60_000} />);
     await waitFor(() => expect(screen.getByPlaceholderText("Bez tytułu")).toHaveValue("A"));
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    fireEvent.input(screen.getByRole("spinbutton", { name: "Font Size" }), { target: { value: "20" } });
-    fireEvent.input(screen.getByRole("spinbutton", { name: "Line Height" }), { target: { value: "2" } });
-    fireEvent.input(screen.getByRole("spinbutton", { name: "Width (px)" }), { target: { value: "800" } });
+    fireEvent.input(screen.getByRole("spinbutton", { name: "Rozmiar tekstu" }), { target: { value: "20" } });
+    fireEvent.input(screen.getByRole("spinbutton", { name: "Odstęp między wierszami" }), { target: { value: "2" } });
+    fireEvent.input(screen.getByRole("spinbutton", { name: "Szerokość tekstu w pikselach" }), { target: { value: "800" } });
     fireEvent.input(screen.getByLabelText("Kolor tła"), { target: { value: "#123456" } });
     window.history.replaceState({}, "", `/notatki/${b.slug}`);
     fireEvent(window, new PopStateEvent("popstate"));
@@ -458,10 +467,11 @@ describe("per-note icons", () => {
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     const input = screen.getByLabelText("Własne emoji");
-    await waitFor(() => expect(input).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole("button", { name: `Wybierz ikonę ${DEFAULT_NOTE_ICON}` })).toHaveFocus());
     fireEvent.input(input, { target: { value: "💡📚" } });
     fireEvent.submit(input.closest("form")!);
     expect(screen.getByRole("alert")).toHaveTextContent("Wpisz jedno emoji.");
+    expect(input).toHaveFocus();
     expect(button).toHaveTextContent(DEFAULT_NOTE_ICON);
     fireEvent.input(input, { target: { value: "👩‍💻" } });
     fireEvent.submit(input.closest("form")!);
@@ -470,6 +480,7 @@ describe("per-note icons", () => {
     expect(button).toHaveFocus();
     await waitFor(async () => expect((await repository.getMostRecent())?.icon).toBe("👩‍💻"));
     fireEvent.click(button);
+    await waitFor(() => expect(screen.getByLabelText("Własne emoji")).toHaveFocus());
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Ikona notatki" })).toBeNull();
     expect(button).toHaveFocus();
@@ -637,7 +648,7 @@ describe("all notes view", () => {
     fireEvent.input(screen.getByPlaceholderText("Bez tytułu"), { target: { value: "Niepotwierdzony" } });
     chooseIcon("🎯");
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Font" }), { target: { value: "IBM Plex Sans" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Krój pisma" }), { target: { value: "IBM Plex Sans" } });
     fireEvent.click(screen.getByRole("button", { name: "Wszystkie notatki" }));
     await waitFor(() => expect(window.location.pathname).toBe("/notatki"));
     expect(await repository.getBySlug("pierwsza")).toMatchObject({ title: "Pierwsza", content: "nowa treść", icon: "🎯", preferences: { fontFamily: "IBM Plex Sans" } });

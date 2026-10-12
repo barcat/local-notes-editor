@@ -22,6 +22,7 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
   const [iconError, setIconError] = useState(false);
   const iconPickerRef = useRef<HTMLDivElement>(null);
   const iconButtonRef = useRef<HTMLButtonElement>(null);
+  const selectedIconRef = useRef<HTMLButtonElement>(null);
   const customIconRef = useRef<HTMLInputElement>(null);
   const closeIconPicker = () => {
     setIsIconOpen(false);
@@ -30,6 +31,7 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
   const chooseIcon = (value: string) => {
     if (!isNoteIcon(value)) {
       setIconError(true);
+      customIconRef.current?.focus();
       return;
     }
     onIconChange(normalizeNoteIcon(value));
@@ -39,7 +41,7 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
   useLayoutEffect(() => { setIsIconOpen(false); }, [noteId, iconDisabled]);
   useLayoutEffect(() => {
     if (!isIconOpen) return;
-    customIconRef.current?.focus();
+    (selectedIconRef.current ?? customIconRef.current)?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -94,6 +96,7 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
                 <div class="note-icon-presets">
                   {NOTE_ICON_PRESETS.map((preset) => (
                     <button type="button" key={preset} aria-label={`Wybierz ikonę ${preset}`}
+                      ref={icon === preset ? selectedIconRef : undefined}
                       aria-pressed={icon === preset} onClick={() => chooseIcon(preset)}>{preset}</button>
                   ))}
                 </div>
@@ -118,6 +121,12 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
               placeholder="Bez tytułu"
               autoComplete="off"
               onInput={(event) => onTitleChange(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.isComposing && !event.repeat && showTitleSave && !isTitleSaving) {
+                  event.preventDefault();
+                  onTitleConfirm();
+                }
+              }}
             />
           </label>
           {showTitleSave && (
@@ -125,11 +134,13 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
               class="title-save-button"
               type="button"
               aria-label="Zapisz tytuł"
+              title="Zapisz tytuł (Enter)"
+              aria-keyshortcuts="Enter"
               disabled={isTitleSaving}
               onClick={onTitleConfirm}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M5 4h11l3 3v13H5zM8 4v6h8V4M8 20v-6h8v6" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7" />
+                <path d="m5 12 4 4 10-10" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" />
               </svg>
             </button>
           )}

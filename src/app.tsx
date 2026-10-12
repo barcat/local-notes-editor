@@ -524,10 +524,12 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
         aria-controls="left-drawer"
         aria-expanded={isDrawerOpen}
         aria-label="Otwórz notatki i ustawienia"
+        title="Notatki i ustawienia"
         onClick={() => setIsDrawerOpen(true)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" />
+          <rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+          <path d="M9 5v14" fill="none" stroke="currentColor" stroke-width="1.5" />
         </svg>
       </button>
 
