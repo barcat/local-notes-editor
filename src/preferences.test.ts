@@ -4,6 +4,7 @@ import {
   EDITOR_FONT_FAMILIES,
   PREFERENCES_STORAGE_KEY,
   applyPreferences,
+  contrastRatio,
   dismissDataNotice,
   hasSufficientContrast,
   isDataNoticeDismissed,
@@ -141,6 +142,25 @@ describe("editor preferences", () => {
     expect(hasSufficientContrast({ backgroundColor: "#ffffff", textColor: "#ffffff" })).toBe(false);
     expect(hasSufficientContrast({ backgroundColor: "#ffffff", textColor: "#000000" })).toBe(true);
   });
+
+  it("provides default colors that clear the contrast warning", () => {
+    expect(hasSufficientContrast(DEFAULT_PREFERENCES)).toBe(true);
+  });
+
+  it.each(["#ffffff", "#000000", "#233d4d", "#808080", "#ffff00", "#ff00ff", "#777777"])(
+    "keeps controls readable on %s even when the note text is invisible",
+    (backgroundColor) => {
+      const root = document.createElement("div");
+      const preferences = { ...DEFAULT_PREFERENCES, backgroundColor, textColor: backgroundColor };
+      applyPreferences(preferences, root);
+      const surface = root.style.getPropertyValue("--control-bg");
+      for (const token of ["--control-text", "--control-muted", "--control-danger"]) {
+        expect(contrastRatio(root.style.getPropertyValue(token), surface)).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(root.style.getPropertyValue("--editor-text")).toBe(backgroundColor);
+      expect(preferences.textColor).toBe(backgroundColor);
+    },
+  );
 
   it("sanitizes interactive updates at the same field boundaries", () => {
     expect(sanitizePreferencesPatch({ fontSizePt: 9, lineHeight: 2.4, editorWidthPx: 1201, textColor: "#ABCDEF" })).toEqual({

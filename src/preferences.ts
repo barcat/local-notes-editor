@@ -6,7 +6,7 @@ export const EDITOR_FONT_FAMILIES: EditorFontFamily[] = ["IBM Plex Mono", "IBM P
 
 export const DEFAULT_PREFERENCES: EditorPreferences = {
   backgroundColor: "#233d4d",
-  textColor: "#fe7f2d",
+  textColor: "#fe812f",
   fontFamily: "IBM Plex Mono",
   fontSizePt: 13,
   lineHeight: 1.8,
@@ -132,7 +132,40 @@ export function applyPreferences(preferences: EditorPreferences, root: HTMLEleme
   root.style.setProperty("--editor-font-size", `${preferences.fontSizePt}pt`);
   root.style.setProperty("--editor-line-height", String(preferences.lineHeight));
   root.style.setProperty("--editor-width", `${preferences.editorWidthPx}px`);
+  // Controls follow the paper color, but stay readable even when the writing
+  // colors have low contrast. These tokens never change stored note preferences.
+  const surface = mixColors(preferences.backgroundColor,
+    relativeLuminance(preferences.backgroundColor) < 0.179 ? "#ffffff" : "#000000", 0.06);
+  const isDark = contrastRatio("#ffffff", surface) >= 4.5;
+  const neutral = isDark ? "#ffffff" : "#000000";
+  const text = readableMix(neutral, surface, 0.92);
+  const muted = readableMix(neutral, surface, 0.7);
+  const danger = isDark ? "#ffc1b9" : "#8f332e";
+  root.style.setProperty("--control-bg", surface);
+  root.style.setProperty("--control-text", text);
+  root.style.setProperty("--control-muted", muted);
+  root.style.setProperty("--control-danger", contrastRatio(danger, surface) >= 4.5 ? danger : text);
+  root.style.setProperty("--control-scheme", isDark ? "dark" : "light");
+  root.style.setProperty("--control-shade", isDark ? "#000000" : "#ffffff");
   root.ownerDocument.defaultView?.dispatchEvent(new Event("editor-appearance-change"));
+}
+
+function mixColors(base: string, tint: string, amount: number): string {
+  const channels = [1, 3, 5].map((offset) => {
+    const a = Number.parseInt(base.slice(offset, offset + 2), 16);
+    const b = Number.parseInt(tint.slice(offset, offset + 2), 16);
+    return Math.round(a + (b - a) * amount).toString(16).padStart(2, "0");
+  });
+  return `#${channels.join("")}`;
+}
+
+function readableMix(text: string, surface: string, amount: number): string {
+  let mixed = mixColors(surface, text, amount);
+  while (contrastRatio(mixed, surface) < 4.5 && amount < 1) {
+    amount = Math.min(1, amount + 0.05);
+    mixed = mixColors(surface, text, amount);
+  }
+  return mixed;
 }
 
 function channelToLinear(channel: number): number {

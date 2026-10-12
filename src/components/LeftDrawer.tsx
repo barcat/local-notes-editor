@@ -115,15 +115,16 @@ export function LeftDrawer({
       >
         <div class="drawer-inner">
           <header class="drawer-header">
-            <h1 class="drawer-title">Lokalne notatki</h1>
+            <h1 class="drawer-title">LagoDraft</h1>
             <button ref={closeButtonRef} class="icon-button" type="button" aria-label="Zamknij panel" onClick={onClose}>
               ×
             </button>
           </header>
 
-          <button class="primary-action" type="button" disabled={isCreatingNote || navigationDisabled} onClick={onNewNote}>+ Nowa notatka</button>
-
-          <button class="secondary-action" type="button" disabled={navigationDisabled} onClick={onAllNotes}>Wszystkie notatki</button>
+          <div class="drawer-navigation">
+            <button class="primary-action" type="button" disabled={isCreatingNote || navigationDisabled} onClick={onNewNote}>+ Nowa notatka</button>
+            <button class="secondary-action" type="button" disabled={navigationDisabled} onClick={onAllNotes}>Wszystkie notatki</button>
+          </div>
 
           <NotesList
             disabled={navigationDisabled}
