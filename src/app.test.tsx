@@ -123,6 +123,27 @@ describe("App shell", () => {
     expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue("HTML <b>i Markdown **bez interpretacji**");
   });
 
+  it("previews links without saving and persists the unchanged source after editing", async () => {
+    const source = "Materiały\n[Preact](https://preactjs.com)\n<b>tekst</b>";
+    const note = createNote("Linki", source, 10);
+    const repository = repositoryFromNotes([note]);
+    const save = vi.spyOn(repository, "save");
+    const firstRender = render(<App repository={repository} autoSaveDelay={0} />);
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveValue(source));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Treść notatki" }), { key: "Enter", ctrlKey: true });
+    expect(screen.getByRole("link", { name: "Preact" })).toHaveAttribute("href", "https://preactjs.com");
+    fireEvent.keyDown(screen.getByRole("region", { name: "Podgląd notatki" }), { key: "Escape" });
+    expect(save).not.toHaveBeenCalled();
+    const edited = source + "\nNowa linia";
+    fireEvent.input(screen.getByRole("textbox", { name: "Treść notatki" }), { target: { value: edited } });
+    fireEvent.click(screen.getByRole("button", { name: "Podgląd linków" }));
+    await waitFor(async () => expect((await repository.getBySlug(note.slug))?.content).toBe(edited));
+    firstRender.unmount();
+    render(<App repository={repository} />);
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveValue(edited));
+    expect(screen.queryByRole("region", { name: "Podgląd notatki" })).not.toBeInTheDocument();
+  });
+
   it("lists, searches and switches between notes", async () => {
     const repository = createNoteRepository(`app-switching-test-${crypto.randomUUID()}`);
     await saveNote(createNote("Starsza notatka", "starsza", 10), repository, 10);

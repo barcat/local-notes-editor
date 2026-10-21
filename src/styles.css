@@ -162,6 +162,10 @@ button:disabled, input:disabled, select:disabled { cursor: default; opacity: .55
   --focus: var(--control-text);
 }
 .editor-content { min-height: calc(100vh - 230px); resize: none; overflow: hidden; line-height: inherit; }
+.editor-mode-bar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.editor-mode-button { border: 0; background: transparent; color: inherit; font: inherit; font-size: 0.75em; text-decoration: underline; text-underline-offset: 3px; }
+.editor-preview { white-space: pre-wrap; overflow-wrap: anywhere; }
+.editor-preview a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .editor-title::placeholder, .editor-content::placeholder { color: var(--editor-text-soft); opacity: 1; }
 .error-toast {
   position: fixed;

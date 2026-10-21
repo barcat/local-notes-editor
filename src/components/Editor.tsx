@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 
 import { isNoteIcon, normalizeNoteIcon, NOTE_ICON_PRESETS } from "../noteIcon";
+import { renderLinks } from "./renderLinks";
 
 interface EditorProps {
   icon: string;
@@ -18,6 +19,20 @@ interface EditorProps {
 
 export function Editor({ icon, onIconChange, iconDisabled, noteId, title, content, onTitleChange, onTitleConfirm, onContentChange, showTitleSave, isTitleSaving }: EditorProps) {
   const [isIconOpen, setIsIconOpen] = useState(false);
+  const [isPreview, setIsPreview] = useState(false);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const restoreContentFocus = useRef(false);
+  const togglePreview = () => {
+    restoreContentFocus.current = true;
+    setIsPreview((value) => !value);
+  };
+  useLayoutEffect(() => { setIsPreview(false); }, [noteId]);
+  useLayoutEffect(() => {
+    if (!restoreContentFocus.current) return;
+    (isPreview ? previewRef.current : contentRef.current)?.focus();
+    restoreContentFocus.current = false;
+  }, [isPreview]);
   const [customIcon, setCustomIcon] = useState("");
   const [iconError, setIconError] = useState(false);
   const iconPickerRef = useRef<HTMLDivElement>(null);
@@ -59,8 +74,6 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
     };
   }, [isIconOpen]);
 
-  const contentRef = useRef<HTMLTextAreaElement>(null);
-
   useLayoutEffect(() => {
     const textarea = contentRef.current;
     if (!textarea) return;
@@ -77,7 +90,7 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
       window.removeEventListener("resize", resize);
       window.removeEventListener("editor-appearance-change", resize);
     };
-  }, [content]);
+  }, [content, isPreview]);
 
   return (
     <main class="editor-shell" id="editor-shell">
@@ -145,17 +158,34 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
             </button>
           )}
         </div>
-        <label>
-          <span class="visually-hidden">Treść notatki</span>
-          <textarea
-            ref={contentRef}
-            class="editor-content"
-            value={content}
-            placeholder="Zacznij pisać…"
-            spellcheck
-            onInput={(event) => onContentChange(event.currentTarget.value)}
-          />
-        </label>
+        <div class="editor-mode-bar">
+          <button type="button" class="editor-mode-button" aria-pressed={isPreview}
+            aria-keyshortcuts="Control+Enter" title="Przełącz podgląd (Ctrl+Enter)"
+            onClick={togglePreview}>{isPreview ? "Wróć do edycji" : "Podgląd linków"}</button>
+        </div>
+        <div onKeyDown={(event) => {
+          if (event.isComposing || event.repeat) return;
+          if ((event.key === "Enter" && event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey)
+            || (event.key === "Escape" && isPreview)) {
+            event.preventDefault();
+            togglePreview();
+          }
+        }}>
+          {/* Keep the textarea mounted to preserve selection and native undo history. */}
+          <label hidden={isPreview}>
+            <span class="visually-hidden">Treść notatki</span>
+            <textarea
+              ref={contentRef}
+              class="editor-content"
+              value={content}
+              placeholder="Zacznij pisać…"
+              spellcheck
+              onInput={(event) => onContentChange(event.currentTarget.value)}
+            />
+          </label>
+          {isPreview && <div ref={previewRef} class="editor-content editor-preview" tabIndex={0}
+            role="region" aria-label="Podgląd notatki">{renderLinks(content)}</div>}
+        </div>
       </div>
     </main>
   );
