@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "preact/test-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmojiFavicon, DEFAULT_NOTE_ICON } from "./noteIcon";
 import { App } from "./app";
 import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from "./preferences";
@@ -33,6 +34,252 @@ function repositoryFromNotes(notes: Note[]): NoteRepository {
     isSlugAvailable: async (slug, exceptId) => [...stored.values()].every((note) => note.slug !== slug || note.id === exceptId),
   };
 }
+
+describe("distraction-free drawer", () => {
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/");
+    window.localStorage.clear();
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    vi.stubGlobal("PointerEvent", class extends MouseEvent {
+      pointerType: string;
+      constructor(type: string, init: MouseEventInit & { pointerType?: string } = {}) {
+        super(type, init);
+        this.pointerType = init.pointerType ?? "mouse";
+      }
+    });
+    // jsdom omits these browser properties; Preact uses them to normalize event names.
+    for (const name of ["onpointerenter", "onpointerleave", "onpointerdown"]) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: null });
+    }
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    for (const name of ["onpointerenter", "onpointerleave", "onpointerdown"]) {
+      Reflect.deleteProperty(HTMLElement.prototype, name);
+    }
+  });
+
+  async function setupWriting() {
+    const first = { ...createNote("Pierwsza", "[Link](https://example.com)", 20), slug: "pierwsza" };
+    const second = { ...createNote("Druga", "Druga treść", 10), slug: "druga" };
+    const repository = repositoryFromNotes([first, second]);
+    const save = vi.spyOn(repository, "save");
+    const view = render(<App repository={repository} autoSaveDelay={60000} />);
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveValue(first.content));
+    const textarea = screen.getByRole("textbox", { name: "Treść notatki" }) as HTMLTextAreaElement;
+    textarea.focus();
+    textarea.setSelectionRange(2, 6);
+    vi.useFakeTimers();
+    return {
+      ...view, textarea, repository, save,
+      edge: document.querySelector(".drawer-edge")!,
+      drawer: document.getElementById("left-drawer")!,
+      trigger: screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }),
+    };
+  }
+
+  function advance(milliseconds: number) {
+    act(() => { vi.advanceTimersByTime(milliseconds); });
+  }
+
+  it("opens on hover without interrupting writing and closes after leaving the drawer", async () => {
+    const { edge, drawer, textarea } = await setupWriting();
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    advance(199);
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    advance(1);
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    expect(drawer).not.toHaveAttribute("aria-modal");
+    expect(drawer).not.toHaveAttribute("inert");
+    expect(textarea).toHaveFocus();
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([2, 6]);
+    expect(textarea.closest("main")!.parentElement).not.toHaveAttribute("inert");
+    expect(document.querySelector(".backdrop")).not.toHaveClass("is-visible");
+    fireEvent.input(textarea, { target: { value: "Piszę dalej" } });
+    expect(textarea).toHaveValue("Piszę dalej");
+    fireEvent.pointerLeave(edge);
+    fireEvent.pointerEnter(drawer);
+    advance(500);
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    fireEvent.pointerLeave(drawer);
+    advance(299);
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    advance(1);
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    expect(drawer).toHaveAttribute("inert");
+    expect(textarea).toHaveFocus();
+  });
+
+  it("cancels stale opening and closing timers when the pointer returns", async () => {
+    const { edge, drawer } = await setupWriting();
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    advance(60);
+    fireEvent.pointerLeave(edge);
+    advance(500);
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    advance(200);
+    fireEvent.pointerLeave(edge);
+    fireEvent.pointerEnter(drawer);
+    fireEvent.pointerLeave(drawer);
+    advance(250);
+    fireEvent.pointerEnter(drawer);
+    advance(500);
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    fireEvent.pointerLeave(drawer);
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    advance(500);
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+  });
+
+  it("keeps focused controls open without moving focus to the close button", async () => {
+    const { edge, drawer, textarea } = await setupWriting();
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    advance(200);
+    const search = within(drawer).getByRole("searchbox");
+    act(() => search.focus());
+    expect(search).toHaveFocus();
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+    expect(textarea.closest("main")!.parentElement).toHaveAttribute("inert");
+    fireEvent.input(search, { target: { value: "Pierwsza" } });
+    fireEvent.pointerLeave(drawer);
+    fireEvent.blur(window);
+    advance(1000);
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    expect(search).toHaveFocus();
+    fireEvent.keyDown(search, { key: "Escape" });
+    advance(20);
+    expect(textarea).toHaveFocus();
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("supports keyboard activation, a modal focus loop and focus restoration", async () => {
+    const { drawer, trigger } = await setupWriting();
+    act(() => trigger.focus());
+    fireEvent.click(trigger, { detail: 0 });
+    const close = within(drawer).getByRole("button", { name: "Zamknij panel" });
+    expect(close).toHaveFocus();
+    const buttons = within(drawer).getAllByRole("button");
+    const last = buttons.at(-1)!;
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: "Escape", isComposing: true });
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    fireEvent.keyDown(close, { key: "Escape" });
+    advance(20);
+    expect(trigger).toHaveFocus();
+    expect(drawer).toHaveAttribute("inert");
+  });
+
+  it("opens explicitly on touch without hover and closes through the backdrop", async () => {
+    const { edge, drawer, trigger, textarea } = await setupWriting();
+    vi.mocked(window.matchMedia).mockReturnValue({ matches: false } as MediaQueryList);
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    fireEvent.pointerEnter(trigger, { pointerType: "touch", buttons: 0 });
+    advance(500);
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    fireEvent.pointerDown(trigger, { pointerType: "touch" });
+    fireEvent.click(trigger);
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+    fireEvent.pointerLeave(drawer);
+    advance(500);
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    fireEvent.click(document.querySelector(".backdrop")!);
+    advance(20);
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    expect(textarea).toHaveFocus();
+  });
+
+  it("ignores dragging and touch hover, and closes passive hover on window exit", async () => {
+    const { edge, drawer, textarea } = await setupWriting();
+    for (const pointer of [{ pointerType: "mouse", buttons: 1 }, { pointerType: "touch", buttons: 0 }]) {
+      fireEvent.pointerEnter(edge, pointer);
+      advance(500);
+      expect(drawer).toHaveAttribute("aria-hidden", "true");
+    }
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    advance(200);
+    fireEvent.pointerLeave(document.documentElement);
+    advance(300);
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    expect(textarea).toHaveFocus();
+  });
+
+  it("moves the preview control to the drawer and preserves source, selection and mode", async () => {
+    const { drawer, trigger, textarea, save } = await setupWriting();
+    expect(screen.queryByRole("button", { name: "Podgląd linków" })).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    fireEvent.click(within(drawer).getByRole("button", { name: "Podgląd linków" }));
+    const preview = screen.getByRole("region", { name: "Podgląd notatki" });
+    advance(20);
+    expect(preview).toHaveFocus();
+    expect(screen.getByRole("link", { name: "Link" })).toHaveAttribute("href", "https://example.com");
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    fireEvent.click(trigger);
+    expect(within(drawer).getByRole("button", { name: "Wróć do edycji" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    advance(20);
+    expect(preview).toHaveFocus();
+    fireEvent.keyDown(preview, { key: "Enter", ctrlKey: true });
+    expect(screen.getByRole("textbox", { name: "Treść notatki" })).toBe(textarea);
+    expect(textarea).toHaveFocus();
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([2, 6]);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("keeps Escape local to the preview and resets preview when switching notes", async () => {
+    const { edge, drawer, trigger, textarea } = await setupWriting();
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    advance(200);
+    fireEvent.keyDown(screen.getByRole("region", { name: "Podgląd notatki" }), { key: "Escape" });
+    expect(textarea).toHaveFocus();
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+    fireEvent.click(trigger);
+    fireEvent.click(within(drawer).getByRole("button", { name: "Druga" }));
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveValue("Druga treść"));
+    expect(screen.queryByRole("region", { name: "Podgląd notatki" })).not.toBeInTheDocument();
+  });
+
+  it("does not restore stale panel focus over a newly selected preview", async () => {
+    const { drawer, trigger } = await setupWriting();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(trigger);
+    fireEvent.click(within(drawer).getByRole("button", { name: "Podgląd linków" }));
+    advance(20);
+    expect(screen.getByRole("region", { name: "Podgląd notatki" })).toHaveFocus();
+  });
+
+  it("does not reopen or take focus from the delete dialog", async () => {
+    const { edge, drawer, trigger } = await setupWriting();
+    fireEvent.click(trigger);
+    fireEvent.click(within(drawer).getByRole("button", { name: "Usuń" }));
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    fireEvent.click(trigger);
+    advance(500);
+    expect(screen.getByRole("button", { name: "Anuluj" })).toHaveFocus();
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Usunąć notatkę?" })).not.toBeInTheDocument();
+    advance(20);
+    expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveFocus();
+  });
+
+  it("cancels pending hover work when unmounted", async () => {
+    const { edge, unmount } = await setupWriting();
+    fireEvent.pointerEnter(edge, { pointerType: "mouse", buttons: 0 });
+    unmount();
+    advance(500);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 describe("App shell", () => {
   beforeEach(() => {
@@ -136,6 +383,7 @@ describe("App shell", () => {
     expect(save).not.toHaveBeenCalled();
     const edited = source + "\nNowa linia";
     fireEvent.input(screen.getByRole("textbox", { name: "Treść notatki" }), { target: { value: edited } });
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
     fireEvent.click(screen.getByRole("button", { name: "Podgląd linków" }));
     await waitFor(async () => expect((await repository.getBySlug(note.slug))?.content).toBe(edited));
     firstRender.unmount();
