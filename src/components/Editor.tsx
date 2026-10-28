@@ -4,6 +4,8 @@ import { isNoteIcon, normalizeNoteIcon, NOTE_ICON_PRESETS } from "../noteIcon";
 import { renderLinks } from "./renderLinks";
 
 interface EditorProps {
+  isPreview: boolean;
+  onPreviewChange: (isPreview: boolean) => void;
   icon: string;
   onIconChange: (icon: string) => void;
   iconDisabled: boolean;
@@ -17,21 +19,16 @@ interface EditorProps {
   isTitleSaving: boolean;
 }
 
-export function Editor({ icon, onIconChange, iconDisabled, noteId, title, content, onTitleChange, onTitleConfirm, onContentChange, showTitleSave, isTitleSaving }: EditorProps) {
+export function Editor({ isPreview, onPreviewChange, icon, onIconChange, iconDisabled, noteId, title, content, onTitleChange, onTitleConfirm, onContentChange, showTitleSave, isTitleSaving }: EditorProps) {
   const [isIconOpen, setIsIconOpen] = useState(false);
-  const [isPreview, setIsPreview] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
-  const restoreContentFocus = useRef(false);
-  const togglePreview = () => {
-    restoreContentFocus.current = true;
-    setIsPreview((value) => !value);
-  };
-  useLayoutEffect(() => { setIsPreview(false); }, [noteId]);
+  const previousPreview = useRef(isPreview);
+  const togglePreview = () => onPreviewChange(!isPreview);
   useLayoutEffect(() => {
-    if (!restoreContentFocus.current) return;
+    if (previousPreview.current === isPreview) return;
+    previousPreview.current = isPreview;
     (isPreview ? previewRef.current : contentRef.current)?.focus();
-    restoreContentFocus.current = false;
   }, [isPreview]);
   const [customIcon, setCustomIcon] = useState("");
   const [iconError, setIconError] = useState(false);
@@ -157,11 +154,6 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
               </svg>
             </button>
           )}
-        </div>
-        <div class="editor-mode-bar">
-          <button type="button" class="editor-mode-button" aria-pressed={isPreview}
-            aria-keyshortcuts="Control+Enter" title="Przełącz podgląd (Ctrl+Enter)"
-            onClick={togglePreview}>{isPreview ? "Wróć do edycji" : "Podgląd linków"}</button>
         </div>
         <div onKeyDown={(event) => {
           if (event.isComposing || event.repeat) return;
