@@ -141,10 +141,15 @@ export function LeftDrawer({
           </header>
 
           <div class="drawer-mode-bar">
-            <button type="button" class="editor-mode-button" aria-pressed={isPreview}
-              aria-keyshortcuts="Control+Enter" title="Przełącz podgląd (Ctrl+Enter)"
+            <button type="button" class="editor-mode-button" aria-label="Podgląd notatki" aria-pressed={isPreview}
+              aria-keyshortcuts="Control+Enter"
+              title={isPreview ? "Wróć do edycji (Ctrl+Enter)" : "Włącz podgląd notatki (Ctrl+Enter)"}
               disabled={previewDisabled} onClick={onTogglePreview}>
-              {isPreview ? "Wróć do edycji" : "Podgląd linków"}
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
             </button>
           </div>
 

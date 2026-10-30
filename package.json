@@ -11,7 +11,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "entities": "6.0.1",
     "idb": "^8.0.3",
+    "marked": "18.1.2",
     "preact": "^10.27.2"
   },
   "devDependencies": {

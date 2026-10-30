@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 
 import { isNoteIcon, normalizeNoteIcon, NOTE_ICON_PRESETS } from "../noteIcon";
-import { renderLinks } from "./renderLinks";
+import { MarkdownPreview } from "./MarkdownPreview";
 
 interface EditorProps {
   isPreview: boolean;
@@ -176,7 +176,7 @@ export function Editor({ isPreview, onPreviewChange, icon, onIconChange, iconDis
             />
           </label>
           {isPreview && <div ref={previewRef} class="editor-content editor-preview" tabIndex={0}
-            role="region" aria-label="Podgląd notatki">{renderLinks(content)}</div>}
+            role="region" aria-label="Podgląd notatki"><MarkdownPreview content={content} noteId={noteId} /></div>}
         </div>
       </div>
     </main>

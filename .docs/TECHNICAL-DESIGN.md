@@ -80,6 +80,24 @@ Główne elementy:
 
 Nie jest potrzebny globalny framework stanu. Stan bieżącej notatki i panelu pozostaje w `App`; trwałym źródłem prawdy są IndexedDB i `localStorage`.
 
+### Podgląd Markdown
+
+Rozszerzenie z 2026-10-30 dodaje opcjonalną interpretację Markdown wyłącznie do podglądu. Edytor, autosave, model danych, routing i eksport TXT nadal operują na oryginalnym tekście. Wcześniejsze wymaganie „zwykły tekst” dotyczy tych operacji; podgląd jest opisanym tutaj wyjątkiem.
+
+Przepływ: `Editor` → `MarkdownPreview` → module Worker → `parseMarkdown` → tokeny Marked → kontrolowany renderer Preact. Zależność `marked` 18.1.2 wymaga Node >=20 i jest zgodna z Node 22 w CI oraz lokalnym Node 22.14.0. Osobna instancja ma stałe opcje `gfm: false`, `pedantic: false`, `breaks: false`, `async: false`. Nie ma rozszerzeń własnej gramatyki linków ani drugiego parsera. `entities` 6.0.1 dekoduje encje do tekstu i adresów bez tworzenia DOM; nie dekodujemy kodu, surowego HTML, składni obrazów ani autolinków.
+
+Pliki `src/markdown/protocol.ts`, `parseMarkdown.ts`, `validateMarkdownTokens.ts`, `safeLink.ts` i `markdown.worker.ts` rozdzielają protokół, tokenizację, walidację struktury, adresy i transport. Walidator ma osobny moduł, aby biblioteka Marked trafiała wyłącznie do Workera w buildzie przeglądarkowym. Przed przesłaniem i przed renderowaniem iteracyjnie sprawdzamy kształt, liczbę i głębokość tokenów. Definicje odsyłaczy są metadanymi; lexer rozwiązuje odwołania przed usunięciem pomocniczej mapy `links` z przesyłanej tablicy.
+
+Renderer tworzy wyłącznie `h1`–`h6`, `p`, `strong`, `em`, `code`, `pre`, `ul`, `ol`, `li`, `blockquote`, `hr`, `br`, `a` i pomocnicze `span`/`div`. Nagłówki wybiera dopiero po walidacji poziomu 1–6. Nie używa `marked.parse`, `innerHTML` ani `dangerouslySetInnerHTML`. HTML, SVG, obrazy i nieobsługiwane tokeny stają się tekstem `raw`; nie powstają elementy pobierające zewnętrzne zasoby. Brak `raw` lub niepoprawna struktura powodują zwykły podgląd całej notatki. Linki muszą przejść kontrolę protokołu HTTP/HTTPS, znaków sterujących i `new URL`; otwierają nową kartę z `rel="noopener noreferrer"`. Odrzucony adres oznacza dosłowną składnię całego linku. Etykiety obsługują bezpieczne formatowanie Markdown; HTML w etykiecie pozostaje tekstem. W porównaniu ze starym parserem linki w kodzie nie są aktywne, a pogrubienie/kursywa w etykietach są interpretowane.
+
+Worker powstaje dopiero po zamontowaniu otwartego podglądu (`new Worker(new URL(..., import.meta.url), { type: "module" })`). Każde zadanie ma identyfikator. Zmiana treści lub identyfikatora notatki, zamknięcie i odmontowanie kończą poprzedniego Workera oraz czyszczą timer. Flaga aktywności i identyfikator chronią przed opóźnionymi odpowiedziami; gotowy Worker również jest kończony. Zmiana wyglądu lub render rodzica nie ponawia zadania.
+
+Budżety: 250 000 jednostek `content.length` przed wysłaniem, 10 000 tokenów (w tym techniczne i elementy list), głębokość 32 (korzeń ma głębokość 1), 1000 ms na odpowiedź łącznie ze startem Workera. W czasie pracy podgląd pokazuje źródło i krótki status „Przygotowuję podgląd…”. Brak Workera, wyjątek, błąd transportu, niepoprawne tokeny i przekroczenie budżetu zachowują źródło ze statusem „Dostępny jest tylko zwykły podgląd tekstu.”. Po timeout Worker zostaje przerwany; nie ma synchronicznego parsera awaryjnego ani automatycznego ponawiania. Zmiana źródła lub ponowne otwarcie rozpoczyna nową próbę.
+
+Fokusowalny region „Podgląd notatki” istnieje w każdym stanie. Tylko krótki status ma `role="status"`; treść nie jest regionem live i status nie przejmuje fokusu. Textarea pozostaje zamontowane, zachowując zaznaczenie i historię natywnego undo/redo. CSS zachowuje nowe linie w tekście, pozwala łamać długie adresy i zapewnia lokalne przewijanie bloków kodu. Wygląd dziedziczy bieżące preferencje notatki. Workbox precachuje plik `markdown.worker-*.js` razem z lokalnymi zasobami zarówno dla `/`, jak i `/local-notes-editor/`.
+
+Testy obejmują rzeczywiste tokeny i ich structured clone, zakres v1, bezpieczeństwo, limity oraz deterministyczny cykl życia przez sterowany Worker testowy. Pomiary CPU nie są progami testów jednostkowych. Wyniki kontroli przeglądarkowej i pomiarów znajdują się w [raporcie weryfikacji](MARKDOWN-PREVIEW-VERIFICATION.md).
+
 ## 5. Project Structure
 
 ```text

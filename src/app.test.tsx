@@ -7,6 +7,10 @@ import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from "./preferences";
 import { createNote, saveNote } from "./noteOperations";
 import { createNoteRepository } from "./noteRepository";
 import type { Note, NoteRepository } from "./types";
+import { installMarkdownWorker, MarkdownWorkerMock } from "./test/markdownWorker";
+
+beforeEach(() => installMarkdownWorker());
+afterEach(() => vi.unstubAllGlobals());
 
 function favicon() {
   return document.head.querySelector('link[rel="icon"]')?.getAttribute("href");
@@ -211,16 +215,21 @@ describe("distraction-free drawer", () => {
 
   it("moves the preview control to the drawer and preserves source, selection and mode", async () => {
     const { drawer, trigger, textarea, save } = await setupWriting();
-    expect(screen.queryByRole("button", { name: "Podgląd linków" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Podgląd notatki" })).not.toBeInTheDocument();
     fireEvent.click(trigger);
-    fireEvent.click(within(drawer).getByRole("button", { name: "Podgląd linków" }));
+    expect(MarkdownWorkerMock.instances).toHaveLength(0);
+    const previewButton = within(drawer).getByRole("button", { name: "Podgląd notatki" });
+    expect(previewButton).toHaveAttribute("aria-pressed", "false");
+    expect(previewButton).toHaveAttribute("title", "Włącz podgląd notatki (Ctrl+Enter)");
+    fireEvent.click(previewButton);
     const preview = screen.getByRole("region", { name: "Podgląd notatki" });
     advance(20);
     expect(preview).toHaveFocus();
     expect(screen.getByRole("link", { name: "Link" })).toHaveAttribute("href", "https://example.com");
     expect(drawer).toHaveAttribute("aria-hidden", "true");
     fireEvent.click(trigger);
-    expect(within(drawer).getByRole("button", { name: "Wróć do edycji" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(drawer).getByRole("button", { name: "Podgląd notatki" })).toHaveAttribute("aria-pressed", "true");
+    expect(previewButton).toHaveAttribute("title", "Wróć do edycji (Ctrl+Enter)");
     fireEvent.keyDown(document, { key: "Escape" });
     advance(20);
     expect(preview).toHaveFocus();
@@ -252,7 +261,7 @@ describe("distraction-free drawer", () => {
     fireEvent.click(trigger);
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.click(trigger);
-    fireEvent.click(within(drawer).getByRole("button", { name: "Podgląd linków" }));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Podgląd notatki" }));
     advance(20);
     expect(screen.getByRole("region", { name: "Podgląd notatki" })).toHaveFocus();
   });
@@ -370,8 +379,8 @@ describe("App shell", () => {
     expect(screen.getByPlaceholderText("Zacznij pisać…")).toHaveValue("HTML <b>i Markdown **bez interpretacji**");
   });
 
-  it("previews links without saving and persists the unchanged source after editing", async () => {
-    const source = "Materiały\n[Preact](https://preactjs.com)\n<b>tekst</b>";
+  it("previews Markdown without saving and persists the unchanged source after editing", async () => {
+    const source = "# Materiały\n[Preact](https://preactjs.com)\n<b>tekst</b>\n\n**mocny tekst**";
     const note = createNote("Linki", source, 10);
     const repository = repositoryFromNotes([note]);
     const save = vi.spyOn(repository, "save");
@@ -379,12 +388,13 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveValue(source));
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Treść notatki" }), { key: "Enter", ctrlKey: true });
     expect(screen.getByRole("link", { name: "Preact" })).toHaveAttribute("href", "https://preactjs.com");
+    expect(screen.getByRole("heading", { name: "Materiały", level: 1 })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("region", { name: "Podgląd notatki" }), { key: "Escape" });
     expect(save).not.toHaveBeenCalled();
     const edited = source + "\nNowa linia";
     fireEvent.input(screen.getByRole("textbox", { name: "Treść notatki" }), { target: { value: edited } });
     fireEvent.click(screen.getByRole("button", { name: "Otwórz notatki i ustawienia" }));
-    fireEvent.click(screen.getByRole("button", { name: "Podgląd linków" }));
+    fireEvent.click(screen.getByRole("button", { name: "Podgląd notatki" }));
     await waitFor(async () => expect((await repository.getBySlug(note.slug))?.content).toBe(edited));
     firstRender.unmount();
     render(<App repository={repository} />);

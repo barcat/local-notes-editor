@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/preact";
 import type { ComponentProps } from "preact";
 import { useState } from "preact/hooks";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installMarkdownWorker, MarkdownWorkerMock } from "../test/markdownWorker";
 import { Editor } from "./Editor";
 
 const props = {
@@ -20,7 +21,9 @@ function togglePreview() {
   fireEvent.keyDown(screen.getByRole("textbox", { name: "Treść notatki" }), { key: "Enter", ctrlKey: true });
 }
 
-describe("link preview", () => {
+describe("Markdown preview", () => {
+  beforeEach(() => installMarkdownWorker());
+  afterEach(() => vi.unstubAllGlobals());
   it("toggles with Ctrl+Enter and Escape, preserves source and selection without edits", () => {
     const onContentChange = vi.fn();
     render(<EditorHarness onContentChange={onContentChange} />);
@@ -45,20 +48,24 @@ describe("link preview", () => {
     expect(onContentChange).not.toHaveBeenCalled();
   });
 
-  it("leaves HTML, other Markdown, malformed and unsafe links as literal text", () => {
-    const content = '<img src=x onerror=alert(1)> **tekst** # nagłówek\n[x](javascript:alert(1)) [x](data:text/html,test) [x](//example.com) [x](https://) [x](https://example.com [brak](url)';
+  it("renders Markdown while keeping HTML, malformed and unsafe links literal", () => {
+    const content = '<img src=x onerror=alert(1)>\n\n**tekst**\n\n# nagłówek\n\n[x](javascript:alert(1)) [x](data:text/html,test) [x](//example.com) [x](https://)';
     const { container } = render(<EditorHarness content={content} />);
     togglePreview();
-    expect(screen.getByRole("region").textContent).toBe(content);
+    expect(screen.getByRole("region").textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(container.querySelector("strong")).toHaveTextContent("tekst");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("nagłówek");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(container.querySelector("img, strong, h1")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
   });
 
   it("renders multiple HTTP/HTTPS links with parentheses and literal labels", () => {
     render(<EditorHarness content={'[<b>tekst</b>](http://example.com) i [Wiki](https://example.com/wiki/Test_(abc))'} />);
     togglePreview();
     expect(screen.getAllByRole("link")).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "<b>tekst</b>" }).querySelector("b")).toBeNull();
+    const htmlLabel = screen.getByRole("link", { name: /<b>.*tekst.*<\/b>/ });
+    expect(htmlLabel.textContent).toBe("<b>tekst</b>");
+    expect(htmlLabel.querySelector("b")).toBeNull();
     expect(screen.getByRole("link", { name: "Wiki" })).toHaveAttribute("href", "https://example.com/wiki/Test_(abc)");
   });
 
@@ -73,7 +80,7 @@ describe("link preview", () => {
     expect(screen.getByRole("textbox", { name: "Treść notatki" })).toBe(textarea);
     expect(textarea).toHaveFocus();
     expect(onPreviewChange).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Podgląd linków" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Podgląd notatki" })).not.toBeInTheDocument();
   });
 
   it("ignores normal Enter, repeated keys and IME composition", () => {
@@ -84,5 +91,24 @@ describe("link preview", () => {
       fireEvent.keyDown(textarea, { key: "Enter", ...modifiers });
       expect(screen.queryByRole("region")).not.toBeInTheDocument();
     }
+    expect(MarkdownWorkerMock.instances).toHaveLength(0);
+  });
+
+  it("keeps Escape and focus working during parsing and fallback", () => {
+    installMarkdownWorker(false);
+    render(<EditorHarness />);
+    togglePreview();
+    const pending = MarkdownWorkerMock.instances[0];
+    expect(screen.getByRole("region")).toHaveFocus();
+    expect(screen.getByRole("status")).toHaveTextContent("Przygotowuję");
+    fireEvent.keyDown(screen.getByRole("region"), { key: "Escape" });
+    expect(pending.terminate).toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveFocus();
+    vi.stubGlobal("Worker", undefined);
+    togglePreview();
+    expect(screen.getByRole("region")).toHaveFocus();
+    expect(screen.getByRole("status")).toHaveTextContent("Dostępny jest tylko zwykły");
+    fireEvent.keyDown(screen.getByRole("region"), { key: "Escape" });
+    expect(screen.getByRole("textbox", { name: "Treść notatki" })).toHaveFocus();
   });
 });
