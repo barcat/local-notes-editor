@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./components/Editor";
 import { DeleteNoteDialog } from "./components/DeleteNoteDialog";
 import { ErrorToast } from "./components/ErrorToast";
@@ -50,7 +50,15 @@ function routePath(route: Route): string {
 }
 
 export function App({ repository = noteRepository, autoSaveDelay, initialPreferences }: AppProps) {
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<"closed" | "hover" | "modal">("closed");
+  const [isPreview, setIsPreview] = useState(false);
+  const isDrawerOpen = drawerMode !== "closed";
+  const isDrawerModal = drawerMode === "modal";
+  const drawerModeRef = useRef(drawerMode);
+  const drawerOpenTimer = useRef<number>();
+  const drawerCloseTimer = useRef<number>();
+  const drawerFocusFrame = useRef<number>();
+  const drawerReturnFocus = useRef<HTMLElement | null>(null);
   const [route, setRoute] = useState<Route>(() => parseRoute());
   const [legacyPreferences] = useState(() => initialPreferences ?? loadPreferences().preferences);
   const [draft, setDraft] = useState<NoteDraft>({ title: "", content: "", preferences: { ...DEFAULT_PREFERENCES } });
@@ -104,10 +112,81 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
     setNotes(await repository.listMostRecent());
   }, [repository]);
 
-  const closeDrawer = useCallback(() => {
-    setIsDrawerOpen(false);
-    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("#open-drawer")?.focus());
+  const clearDrawerTimers = useCallback(() => {
+    window.clearTimeout(drawerOpenTimer.current);
+    window.clearTimeout(drawerCloseTimer.current);
   }, []);
+
+  const closeDrawer = useCallback(() => {
+    clearDrawerTimers();
+    if (drawerFocusFrame.current !== undefined) cancelAnimationFrame(drawerFocusFrame.current);
+    drawerModeRef.current = "closed";
+    setDrawerMode("closed");
+  }, [clearDrawerTimers]);
+
+  const openDrawer = useCallback(() => {
+    clearDrawerTimers();
+    if (isDeleteDialogOpen || drawerModeRef.current === "modal") return;
+    if (drawerModeRef.current === "closed") {
+      drawerReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
+    drawerModeRef.current = "modal";
+    setDrawerMode("modal");
+  }, [clearDrawerTimers, isDeleteDialogOpen]);
+
+  const dismissDrawer = useCallback(() => {
+    const restoreFocus = drawerModeRef.current === "modal";
+    closeDrawer();
+    if (restoreFocus) drawerFocusFrame.current = requestAnimationFrame(() => {
+      if (drawerModeRef.current !== "closed") return;
+      const target = drawerReturnFocus.current;
+      if (target?.isConnected) target.focus({ preventScroll: true });
+    });
+  }, [closeDrawer]);
+
+  const queueDrawerOpen = (event: { pointerType: string; buttons: number }) => {
+    clearDrawerTimers();
+    if (event.buttons !== 0 || !["mouse", "pen"].includes(event.pointerType)
+      || !window.matchMedia?.("(any-hover: hover) and (any-pointer: fine)").matches
+      || isDeleteDialogOpen || !isHydrated || isCreatingNote || route.kind !== "editor"
+      || drawerModeRef.current !== "closed") return;
+    drawerOpenTimer.current = window.setTimeout(() => {
+      drawerReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      drawerModeRef.current = "hover";
+      setDrawerMode("hover");
+    }, 200);
+  };
+
+  const queueDrawerClose = useCallback(() => {
+    clearDrawerTimers();
+    if (drawerModeRef.current === "hover") {
+      drawerCloseTimer.current = window.setTimeout(closeDrawer, 300);
+    }
+  }, [clearDrawerTimers, closeDrawer]);
+
+  useEffect(() => () => {
+    clearDrawerTimers();
+    if (drawerFocusFrame.current !== undefined) cancelAnimationFrame(drawerFocusFrame.current);
+  }, [clearDrawerTimers]);
+  useEffect(() => {
+    if (route.kind !== "editor" || isDeleteDialogOpen) closeDrawer();
+  }, [route.kind, isDeleteDialogOpen, closeDrawer]);
+  useEffect(() => {
+    window.addEventListener("blur", queueDrawerClose);
+    document.documentElement.addEventListener("pointerleave", queueDrawerClose);
+    return () => {
+      window.removeEventListener("blur", queueDrawerClose);
+      document.documentElement.removeEventListener("pointerleave", queueDrawerClose);
+    };
+  }, [queueDrawerClose]);
+  useLayoutEffect(() => {
+    setIsPreview(false);
+  }, [draft.id]);
+
+  const toggleDrawerPreview = () => {
+    closeDrawer();
+    setIsPreview((value) => !value);
+  };
 
   const saveCoordinator = useMemo(
     () => createSaveCoordinator({
@@ -517,6 +596,9 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
 
   return (
     <>
+      <div class="drawer-edge" aria-hidden="true"
+        {...(isDeleteDialogOpen && { inert: true })}
+        onPointerEnter={queueDrawerOpen} onPointerLeave={queueDrawerClose} />
       <button
         class="menu-button"
         id="open-drawer"
@@ -524,8 +606,10 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
         aria-controls="left-drawer"
         aria-expanded={isDrawerOpen}
         aria-label="Otwórz notatki i ustawienia"
-        title="Notatki i ustawienia"
-        onClick={() => setIsDrawerOpen(true)}
+        {...((isDrawerModal || isDeleteDialogOpen) && { inert: true })}
+        onPointerEnter={queueDrawerOpen}
+        onPointerLeave={queueDrawerClose}
+        onClick={openDrawer}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
@@ -533,8 +617,10 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
         </svg>
       </button>
 
-      <div {...((isDrawerOpen || !isHydrated || isCreatingNote) && { inert: true })}>
+      <div {...((isDrawerModal || isDeleteDialogOpen || !isHydrated || isCreatingNote) && { inert: true })}>
         <Editor
+          isPreview={isPreview}
+          onPreviewChange={setIsPreview}
           icon={isHydrated && !isCreatingNote && !loadError ? normalizeNoteIcon(draft.icon) : DEFAULT_NOTE_ICON}
           onIconChange={updateNoteIcon}
           iconDisabled={!isHydrated || !draft.id || isCreatingNote || Boolean(loadError)}
@@ -551,7 +637,14 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
 
       <LeftDrawer
         isOpen={isDrawerOpen}
-        onClose={closeDrawer}
+        isModal={isDrawerModal}
+        onClose={dismissDrawer}
+        onPointerEnter={clearDrawerTimers}
+        onPointerLeave={queueDrawerClose}
+        onInteract={openDrawer}
+        isPreview={isPreview}
+        onTogglePreview={toggleDrawerPreview}
+        previewDisabled={!isHydrated || isCreatingNote || Boolean(loadError)}
         onAllNotes={() => { void navigate({ kind: "list" }); }}
         navigationDisabled={!isHydrated || isCreatingNote || isTitleSaving}
         onNewNote={() => { void startNewNote(); }}
@@ -576,7 +669,10 @@ export function App({ repository = noteRepository, autoSaveDelay, initialPrefere
       {isDeleteDialogOpen && (
         <DeleteNoteDialog
           title={draft.title}
-          onCancel={() => setIsDeleteDialogOpen(false)}
+          onCancel={() => {
+            setIsDeleteDialogOpen(false);
+            requestAnimationFrame(() => document.querySelector<HTMLElement>(isPreview ? ".editor-preview" : ".editor-content")?.focus());
+          }}
           onConfirm={() => { void confirmDelete(); }}
         />
       )}

@@ -2,6 +2,8 @@
 
 Status: gotowy do realizacji etapami. Data: 2026-09-07.
 
+Dokument historyczny dotyczący MVP. Rozszerzenie opcjonalnego podglądu Markdown z 2026-10-30 opisuje [MARKDOWN-PREVIEW-PLAN.md](MARKDOWN-PREVIEW-PLAN.md); zapis i eksport nadal zachowują oryginalny tekst. Aktualna architektura podglądu znajduje się w [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md#podgląd-markdown).
+
 ## Assumptions
 
 ### Podstawa i zakres

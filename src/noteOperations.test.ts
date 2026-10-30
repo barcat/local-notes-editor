@@ -126,7 +126,8 @@ describe("save coordinator", () => {
   });
 
   it("creates a UTF-8 text export from the latest content", async () => {
-    const exported = createTextExport("Mój plan", "spacje  \n\nłódź <b>bez HTML</b>");
+    const source = "# Mój plan\n\nspacje  \n\nłódź <b>bez HTML</b> **mocne** [link](https://example.com)";
+    const exported = createTextExport("Mój plan", source);
     expect(exported.fileName).toBe("moj-plan.txt");
     expect(exported.blob.type).toBe("text/plain;charset=utf-8");
     const text = await new Promise<string>((resolve, reject) => {
@@ -135,7 +136,7 @@ describe("save coordinator", () => {
       reader.onerror = () => reject(reader.error);
       reader.readAsText(exported.blob);
     });
-    expect(text).toBe("spacje  \n\nłódź <b>bez HTML</b>");
+    expect(text).toBe(source);
   });
   it("gives new notes independent settings and preserves them through autosave and rename", async () => {
     const a = createNewNote();

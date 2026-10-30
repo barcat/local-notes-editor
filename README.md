@@ -1,6 +1,14 @@
 # Lokalne notatki
 
-Mały edytor zwykłego tekstu z lokalnym zapisem notatek w IndexedDB. Aplikacja nie wysyła treści notatek do sieci i nie interpretuje HTML ani Markdown.
+Mały edytor zwykłego tekstu z lokalnym zapisem notatek w IndexedDB i opcjonalnym podglądem Markdown. Aplikacja nie wysyła treści notatek do sieci.
+
+## Podgląd notatki
+
+Włącz podgląd ikoną oka w panelu lub skrótem `Ctrl+Enter`. Ten sam skrót albo `Escape` przywraca edycję. Podgląd obsługuje akapity, nagłówki 1–6, pogrubienie, kursywę, kod w linii i blokach, listy (również zagnieżdżone), cytaty, separatory i twarde przejścia linii. Pojedynczy Enter w zwykłym tekście pozostaje widoczną nową linią.
+
+Linki z poprawnym bezwzględnym adresem HTTP/HTTPS otwierają się w nowej karcie. HTML, obrazy i niedozwolone linki są wyświetlane dosłownie; obrazy nie są pobierane. Tabele, przekreślenia i checkboxy GFM nie są interpretowane. Kod nie ma kolorowania składni.
+
+Edycja, autosave, IndexedDB i eksport `.txt` zawsze zachowują oryginalny tekst Markdown. Samo przełączenie trybu nie zapisuje notatki i zachowuje zaznaczenie oraz historię undo/redo. Tokenizacja działa lokalnie w Workerze. Podczas przygotowywania podglądu oraz po przekroczeniu limitów lub błędzie widoczny jest cały tekst źródłowy. Limity to 250 000 jednostek długości tekstu, 10 000 tokenów, głębokość 32 i 1000 ms na odpowiedź Workera. Ponowna próba następuje po zmianie treści lub ponownym otwarciu podglądu.
 
 ## Uruchomienie
 
@@ -20,7 +28,7 @@ npm run build
 npm run preview
 ```
 
-Build tworzy statyczny katalog `dist/` z aplikacją, `404.html`, manifestem i service workerem. Service worker precachuje wyłącznie skompilowane zasoby aplikacji; notatki pozostają w IndexedDB, a preferencje w localStorage.
+Build tworzy statyczny katalog `dist/` z aplikacją, `404.html`, manifestem i service workerem. Service worker precachuje skompilowane zasoby aplikacji, w tym Worker Markdown; podgląd działa offline po pierwszym precache, także po odświeżeniu. Notatki pozostają w IndexedDB, a preferencje w localStorage.
 
 ## GitHub Pages i base path
 
@@ -50,3 +58,5 @@ Usunięcie danych witryny lub profilu przeglądarki usuwa lokalne notatki. Ekspo
 ## Kontrola MVP
 
 Zweryfikowany lokalnie scenariusz obejmuje: pusty start, autosave, utworzenie kolejnej notatki, szybkie przełączanie, konflikt slugów, odświeżenie, eksport i usuwanie. Kontrole builda obejmują wariant root oraz `VITE_BASE_PATH=/local-notes-editor/`. Szczegółowe założenia i kryteria pozostają w [.docs/IMPLEMENTATION-PLAN.md](.docs/IMPLEMENTATION-PLAN.md).
+
+Rozszerzenie podglądu opisują [plan Markdown](.docs/MARKDOWN-PREVIEW-PLAN.md), [projekt techniczny](.docs/TECHNICAL-DESIGN.md#podgląd-markdown) i [raport weryfikacji](.docs/MARKDOWN-PREVIEW-VERIFICATION.md).

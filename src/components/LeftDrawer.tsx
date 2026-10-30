@@ -5,7 +5,14 @@ import type { EditorPreferences, Note } from "../types";
 
 interface LeftDrawerProps {
   isOpen: boolean;
+  isModal: boolean;
   onClose: () => void;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+  onInteract: () => void;
+  isPreview: boolean;
+  onTogglePreview: () => void;
+  previewDisabled: boolean;
   onAllNotes: () => void;
   navigationDisabled?: boolean;
   onNewNote: () => void;
@@ -38,7 +45,14 @@ const focusableSelector = [
 
 export function LeftDrawer({
   isOpen,
+  isModal,
   onClose,
+  onPointerEnter,
+  onPointerLeave,
+  onInteract,
+  isPreview,
+  onTogglePreview,
+  previewDisabled,
   onNewNote,
   onAllNotes,
   navigationDisabled,
@@ -64,10 +78,11 @@ export function LeftDrawer({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
-    closeButtonRef.current?.focus();
+    if (!isOpen || !isModal) return;
+    if (!drawerRef.current?.contains(document.activeElement)) closeButtonRef.current?.focus();
 
     const keepFocusInside = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.repeat) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
@@ -91,16 +106,16 @@ export function LeftDrawer({
 
     document.addEventListener("keydown", keepFocusInside);
     return () => document.removeEventListener("keydown", keepFocusInside);
-  }, [isOpen, onClose]);
+  }, [isOpen, isModal, onClose]);
 
   return (
     <>
       <button
-        class={`backdrop${isOpen ? " is-visible" : ""}`}
+        class={`backdrop${isModal ? " is-visible" : ""}`}
         type="button"
         tabIndex={-1}
         aria-label="Zamknij panel"
-        aria-hidden={!isOpen}
+        aria-hidden={!isModal}
         onClick={onClose}
       />
       <aside
@@ -108,10 +123,14 @@ export function LeftDrawer({
         class={`drawer${isOpen ? " is-open" : ""}`}
         id="left-drawer"
         role="dialog"
-        aria-modal="true"
+        aria-modal={isModal ? "true" : undefined}
         aria-label="Notatki i ustawienia"
         aria-hidden={!isOpen}
         {...(!isOpen && { inert: true })}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
+        onPointerDown={onInteract}
+        onFocusIn={onInteract}
       >
         <div class="drawer-inner">
           <header class="drawer-header">
@@ -120,6 +139,19 @@ export function LeftDrawer({
               ×
             </button>
           </header>
+
+          <div class="drawer-mode-bar">
+            <button type="button" class="editor-mode-button" aria-label="Podgląd notatki" aria-pressed={isPreview}
+              aria-keyshortcuts="Control+Enter"
+              title={isPreview ? "Wróć do edycji (Ctrl+Enter)" : "Włącz podgląd notatki (Ctrl+Enter)"}
+              disabled={previewDisabled} onClick={onTogglePreview}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
 
           <div class="drawer-navigation">
             <button class="primary-action" type="button" disabled={isCreatingNote || navigationDisabled} onClick={onNewNote}>+ Nowa notatka</button>

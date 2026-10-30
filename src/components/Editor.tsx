@@ -1,8 +1,11 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 
 import { isNoteIcon, normalizeNoteIcon, NOTE_ICON_PRESETS } from "../noteIcon";
+import { MarkdownPreview } from "./MarkdownPreview";
 
 interface EditorProps {
+  isPreview: boolean;
+  onPreviewChange: (isPreview: boolean) => void;
   icon: string;
   onIconChange: (icon: string) => void;
   iconDisabled: boolean;
@@ -16,8 +19,17 @@ interface EditorProps {
   isTitleSaving: boolean;
 }
 
-export function Editor({ icon, onIconChange, iconDisabled, noteId, title, content, onTitleChange, onTitleConfirm, onContentChange, showTitleSave, isTitleSaving }: EditorProps) {
+export function Editor({ isPreview, onPreviewChange, icon, onIconChange, iconDisabled, noteId, title, content, onTitleChange, onTitleConfirm, onContentChange, showTitleSave, isTitleSaving }: EditorProps) {
   const [isIconOpen, setIsIconOpen] = useState(false);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previousPreview = useRef(isPreview);
+  const togglePreview = () => onPreviewChange(!isPreview);
+  useLayoutEffect(() => {
+    if (previousPreview.current === isPreview) return;
+    previousPreview.current = isPreview;
+    (isPreview ? previewRef.current : contentRef.current)?.focus();
+  }, [isPreview]);
   const [customIcon, setCustomIcon] = useState("");
   const [iconError, setIconError] = useState(false);
   const iconPickerRef = useRef<HTMLDivElement>(null);
@@ -59,8 +71,6 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
     };
   }, [isIconOpen]);
 
-  const contentRef = useRef<HTMLTextAreaElement>(null);
-
   useLayoutEffect(() => {
     const textarea = contentRef.current;
     if (!textarea) return;
@@ -77,7 +87,7 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
       window.removeEventListener("resize", resize);
       window.removeEventListener("editor-appearance-change", resize);
     };
-  }, [content]);
+  }, [content, isPreview]);
 
   return (
     <main class="editor-shell" id="editor-shell">
@@ -145,17 +155,29 @@ export function Editor({ icon, onIconChange, iconDisabled, noteId, title, conten
             </button>
           )}
         </div>
-        <label>
-          <span class="visually-hidden">Treść notatki</span>
-          <textarea
-            ref={contentRef}
-            class="editor-content"
-            value={content}
-            placeholder="Zacznij pisać…"
-            spellcheck
-            onInput={(event) => onContentChange(event.currentTarget.value)}
-          />
-        </label>
+        <div onKeyDown={(event) => {
+          if (event.isComposing || event.repeat) return;
+          if ((event.key === "Enter" && event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey)
+            || (event.key === "Escape" && isPreview)) {
+            event.preventDefault();
+            togglePreview();
+          }
+        }}>
+          {/* Keep the textarea mounted to preserve selection and native undo history. */}
+          <label hidden={isPreview}>
+            <span class="visually-hidden">Treść notatki</span>
+            <textarea
+              ref={contentRef}
+              class="editor-content"
+              value={content}
+              placeholder="Zacznij pisać…"
+              spellcheck
+              onInput={(event) => onContentChange(event.currentTarget.value)}
+            />
+          </label>
+          {isPreview && <div ref={previewRef} class="editor-content editor-preview" tabIndex={0}
+            role="region" aria-label="Podgląd notatki"><MarkdownPreview content={content} noteId={noteId} /></div>}
+        </div>
       </div>
     </main>
   );
